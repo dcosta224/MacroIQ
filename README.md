@@ -1,25 +1,30 @@
 # MacroIQ
 
-**An agentic recipe design system that keeps favorite dishes recognizable under nutrition goals.**
-
-[Project write-up](https://www.ischool.berkeley.edu/programs/mids/capstone/2026b-summer/macroiq-0) · [MVP Live Demo](http://macroiq.org) · [Product UI](recipe_opt_web/) · [Agent](recipe_opt_agent/)
-
 UC Berkeley MIDS Capstone (Summer 2026) · Daniel Costa, Kadin Wilkins
+
+## Problem & Motivation
+
+Ask a large language model to create a recipe for "high-protein carbonara" and you usually get something that reads like a recipe, but falls apart in the kitchen. Traditional nutrition tools can tell you whether a meal meets your goals, but not how to redesign it without compromising the dish. The hard problem sits in between:
+
+**People want meals that satisfy their nutrition goals without sacrificing quality.**
+
+In practice, AI-generated recipes often fall flat once they leave the chat window. They miss the user's nutrition targets, drift so far from the original dish that the recipe no longer resembles what was requested, or recommend ingredient combinations that don't hold up in the kitchen. Underneath these failures is a lack of grounded reasoning: vague ingredient descriptions, inconsistent quantities, and nutrition estimates that don't reliably map to real values. Health-oriented home cooks need recommendations they can trust, not recipes that merely sound plausible.
+
+MacroIQ treats this as a data science problem: start with real human-tested recipes and nutrition markers, propose data-driven ingredient edits, and leverage an LLM to check every candidate against the user’s goals before producing a recommendation.
+
+## Our Solution
+
+MacroIQ is an agentic recipe design system that bridges the gap between language models and structured food science. Rather than asking an LLM to invent a recipe in one pass, MacroIQ grounds recipe generation in millions of human-created recipes, authoritative nutrition databases, and mathematical optimization. The system treats recipe design as an iterative decision-making problem: propose ingredient changes, measure their nutritional and culinary consequences, and continue refining until the recipe satisfies user constraints.
+
+This approach allows MacroIQ to generate recipes that simultaneously satisfy macronutrient targets, accommodate dietary restrictions, and preserve dish identity while remaining explainable to the user. Every recommendation is accompanied by evidence showing how ingredient choices compare with similar real recipes and whether nutrition goals have actually been achieved.
+
+Users interact with MacroIQ by naming a dish, specifying nutritional targets and dietary preferences, and observing the agent progressively redesign the recipe. Rather than producing a single opaque answer, the system exposes each optimization step, allowing users to both understand and trust why a recommendation was made.
 
 ---
 
-## Problem
+**[Project write-up](https://www.ischool.berkeley.edu/programs/mids/capstone/2026b-summer/macroiq-0)** · **[MVP Live Demo](http://macroiq.org)** · **[Product UI](recipe_opt_web/)** · **[Agent](recipe_opt_agent/)**
 
-LLMs draft recipes that read well and fail in the kitchen—missed macros, lost dish identity, or amounts that don’t map to real foods. Trackers measure after the fact; they don’t redesign a named meal. People want nutrition goals without sacrificing quality.
-
-## Solution
-
-MacroIQ grounds recipe redesign in RecipeNLG, USDA FoodData Central, and FoodOn. An agent proposes small ingredient edits; a convex optimizer chooses grams; structured checks decide whether the plate still works. Users set a dish, macro box, and dietary rules, then audit each step.
-
-```text
-request + macros → FoodOn neighborhood → USDA grounding
-                 → hull + CVXPY LP → LangGraph edit loop → recipe
-```
+---
 
 ## Innovation
 
