@@ -59,7 +59,7 @@ Design notes: [`docs/recipe_opt_agent.md`](docs/recipe_opt_agent.md)
 
 ## Results
 
-Same requests and boxes as one-shot GPT-5.5; shared USDA scoring. MacroIQ wins **ratio** and **nutrient** in every suite; on **preserve identity**, holistic **5.80** ≈ human recipes **5.85** (GPT-5.5: **3.92**). Full table: [project write-up](https://www.ischool.berkeley.edu/programs/mids/capstone/2026b-summer/macroiq-0).
+MacroIQ wins on **empirical ingredient ratio** and **nutrient accuracy** metrics in every suite. Full table: [project write-up](https://www.ischool.berkeley.edu/programs/mids/capstone/2026b-summer/macroiq-0).
 
 ## Stack
 
