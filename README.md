@@ -1,596 +1,187 @@
-# Capstone — Food & Recipe Data Pipeline
+# MacroIQ
 
-Berkeley Capstone project for loading public food-composition, recipe, and unit-conversion datasets into **Supabase Postgres**. Raw files live under `Data/` (gitignored); loaders create four logical schemas on the database.
+**Keeping favorite dishes recognizable under nutrition goals.**
 
-## Repository layout
+[Live demo](http://macroiq.org) · [Product UI](recipe_opt_web/) · [Agent](recipe_opt_agent/) · [Design notes](docs/recipe_opt_agent.md)
 
-```
-Capstone/
-├── Data/                          # Raw datasets (not committed; see .gitignore)
-│   ├── All_Food_Data_April_2026/  # USDA FoodData Central CSV export
-│   ├── recipes/                   # open_recipes.json, RecipeNLG.csv
-│   ├── conversions/               # food_density.csv (generated from PDF)
-│   └── food_density.pdf           # FAO/INFOODS Density Database v2.0
-├── scripts/                       # Python utilities and loaders
-│   ├── db.py                      # Shared Supabase connection from .env
-│   ├── infer_schema.py            # Introspect usda schema + infer joins
-│   ├── load_recipes.py            # recipe schema (Open Recipes + RecipeNLG)
-│   ├── load_recipe_embeddings.py  # MiniLM vectors → recipe.recipe_nlg_embedding
-│   ├── dedupe_recipe_nlg.py       # Kadin hybrid dedup (DELETE duplicates)
-│   └── load_food_density.py       # PDF → CSV → conversions schema
-├── sql/                           # DDL and psql-based USDA bulk load
-│   ├── 00_create_schema.sql …     # usda tables + COPY scripts
-│   ├── 10_create_recipe_schema.sql
-│   ├── 20_create_conversions_schema.sql
-│   └── load_*.sh                  # Shell wrappers for loaders
-├── pyproject.toml                 # Project metadata and dependencies (uv)
-├── uv.lock                        # Locked dependency versions
-├── requirements.txt               # Pip-compatible pin list (optional)
-├── .env.example                   # Supabase connection template
-└── README.md
-```
+MacroIQ is a Berkeley MIDS Capstone project. Ask for a high-protein carbonara, a no-pork BBQ plate, or a vegetarian bobotie with a real macro box—and get a recipe that is still that dish after every ingredient is linked to USDA FoodData Central and checked against how people actually cook it.
 
-## Data overview
-
-### USDA FoodData Central (`Data/All_Food_Data_April_2026/`)
-
-April 2026 **full download** (CSV). ~25 files, ~2.1M foods in `food.csv`, ~27M rows in `food_nutrient.csv`. Loaded into the **`usda`** schema.
-
-| Area | Main tables | Role |
-|------|-------------|------|
-| Core | `food`, `nutrient`, `food_category`, `measure_unit` | Every food item (`fdc_id`) and reference nutrients/units |
-| Branded / legacy / FNDDS | `branded_food`, `foundation_food`, `sr_legacy_food`, `survey_fndds_food`, … | Type-specific metadata keyed by `fdc_id` |
-| Composition | `food_nutrient`, `food_portion`, `food_component` | Nutrients per 100g, portions, refuse/components |
-| Lab / samples | `lab_method*`, `sub_sample_*`, `market_acquisition` | Analytical methods and sample lineage |
-
-Hub model: **`food.fdc_id`** links to extension tables (`branded_food`, `food_nutrient`, etc.). Run `uv run python scripts/infer_schema.py` for a full join map and `scripts/usda_schema_inferred.json`.
-
-### Recipes (`Data/recipes/`)
-
-| File | Rows (approx.) | DB table |
-|------|----------------|----------|
-| `open_recipes.json` | ~173k (JSON lines, schema.org-style) | `recipe.open_recipe` |
-| `RecipeNLG.csv` | ~2.2M | `recipe.recipe_nlg` |
-
-`recipe_nlg` stores `ingredients`, `directions`, and `ner` as JSON text; `open_recipe` keeps ingredients as a single text block plus URL, times, source, etc.
-
-### Conversions (`Data/food_density.pdf` → `Data/conversions/food_density.csv`)
-
-FAO/INFOODS **Density Database v2.0** — volume ↔ mass factors (g/ml, specific gravity). **638 foods** in **`conversions.food_density`**.
+This README is written for recruiters and hiring managers browsing the portfolio. It highlights **what the product does**, **what is actually novel**, and **where in the repo** to look for systems engineering and production work. Setup detail for collaborators lives further down and in linked docs.
 
 ---
 
-## Database schemas (Supabase)
+## The problem in one breath
 
-| Schema | Purpose | How to load |
-|--------|---------|-------------|
-| `usda` | FoodData Central | `./sql/load_all.sh` (needs `psql`) |
-| `recipe` | Open Recipes + RecipeNLG | `uv run python scripts/load_recipes.py` |
-| `conversions` | Food density factors | `uv run python scripts/load_food_density.py` |
-
-Connection settings are read from **`.env`** (copy from `.env.example`). Python loaders use the **session pooler** on port **5432** by default; USDA `\copy` scripts do the same.
-
-```
-postgresql://<PG_POOL_USER>:<password>@<PG_POOL_HOST>:5432/postgres?sslmode=require
-```
-
-> **Storage:** Full USDA + RecipeNLG is multi‑GB. Ensure your Supabase plan has enough disk before loading everything. RecipeNLG supports resume: `uv run python scripts/load_recipes.py --nlg-only`.
+Large language models draft recipes that *read* well and then fall apart in the kitchen: wrong USDA matches, missed protein targets, or a “carbonara” that no longer looks like carbonara. Calorie trackers measure after the fact; they do not redesign a named dish. The useful problem sits in between—**nutrition goals without sacrificing what makes the meal worth cooking**.
 
 ---
 
-## Setup with [uv](https://docs.astral.sh/uv/)
+## What we built
 
-[uv](https://docs.astral.sh/uv/) manages the virtualenv and dependencies via `pyproject.toml` and `uv.lock`.
+Users name a dish (or type a free-text request), set protein / carbohydrate / fat calorie shares and dietary rules, and watch an agent redesign the recipe in measurable steps.
 
-### Install uv
+Under the hood:
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# or: brew install uv
+1. **Ground** free-form ingredient lines to USDA foods and gram amounts  
+2. **Locate** the dish in a FoodOn neighborhood of real human recipes (RecipeNLG / CuisineNLG)  
+3. **Optimize** amounts with a convex program so macros and typical proportions stay honest  
+4. **Edit** with a LangGraph loop—propose a small swap/add/remove, re-score with the optimizer, keep going only while the suggestion improves  
+
+Language models brainstorm edible changes. Structured data and math decide whether the plate still works.
+
+```text
+  User request + macro box
+            │
+            ▼
+  FoodOn neighborhood of real recipes
+            │
+            ▼
+  USDA FDC grounding (foods + grams)
+            │
+            ▼
+  Hull check + CVXPY LP  ←── amounts owned by the optimizer
+            │
+            ▼
+  LangGraph agent loop (diagnose → propose → decide → apply)
+            │
+            ▼
+  Auditable recipe: macros, ratio fidelity, dietary survival
 ```
 
-### First-time project setup
+**Try it:** [macroiq.org](http://macroiq.org) · local product UI at `/` via [`recipe_opt_web/`](recipe_opt_web/) · personal pantry optimizer at `/personal`.
+
+---
+
+## Main innovation
+
+> **LLM proposes the edit. The neighborhood + linear program own the grams.**
+
+Most “AI recipe” demos ask a model for a finished ingredient list and hope the numbers work out. MacroIQ treats recipe design as **constrained optimization with an agent in the loop**:
+
+| Idea | Why it matters | Where to look |
+|------|----------------|---------------|
+| **Weighted empirical LP** | Minimizes how far mass shares drift from real dishes for that family, subject to Atwater protein/carb/fat calorie fractions (and optional fiber as a gram constraint—not a fake calorie share) | [`scripts/weighted_empirical_opt.py`](scripts/weighted_empirical_opt.py) |
+| **FoodOn neighborhood priors** | “Still carbonara?” is learned from related resolved recipes, not from vibes in the prompt | [`scripts/canonical_optimization.py`](scripts/canonical_optimization.py), FoodOn caches under [`foodon_web/cache/`](foodon_web/cache/) |
+| **Conical hull / feasibility** | Before chasing edits, ask whether the current ingredient set can reach the macro box at all | [`scripts/hull_geometry.py`](scripts/hull_geometry.py), [`scripts/opt_diagnosis.py`](scripts/opt_diagnosis.py) |
+| **LangGraph control loop** | Diagnose → propose bundles → LP-score → auto-apply clear favorites or ask the LLM → apply → stop on fidelity bands | [`recipe_opt_agent/graph.py`](recipe_opt_agent/graph.py), [`docs/recipe_opt_agent.md`](docs/recipe_opt_agent.md) |
+| **Structured OOD protein** | When the neighborhood cannot stretch protein, propose a checked lean-protein add (e.g. turkey on ribs) instead of free-associating beans and tenderloin | [`recipe_opt_agent/ood_branch.py`](recipe_opt_agent/ood_branch.py), win stories in [`docs/agent_vs_gpt55_presentation_wins.md`](docs/agent_vs_gpt55_presentation_wins.md) |
+| **LLM seed → LP refine** | For the personal pantry path: one model call drafts amounts toward macros + fiber; a trust-region LP enforces the box without reinventing the dish | [`recipe_opt_agent/personal_pipeline.py`](recipe_opt_agent/personal_pipeline.py) |
+
+The non-technical version: we do not trust the chat model with the calculator. We trust it with *ideas*, then verify those ideas against USDA numbers and the way similar recipes are actually built.
+
+---
+
+## Systems thinking (where to look)
+
+This repo is not a single notebook glued to an API. End-to-end food modeling required pipelines, caches, eval harnesses, and honest failure modes.
+
+| Theme | What we did | Paths |
+|-------|-------------|-------|
+| **Data foundation** | Loaded USDA FoodData Central, RecipeNLG (~2M recipes), and FAO density conversions into Supabase Postgres (`usda` / `recipe` / `conversions`) | [`sql/`](sql/), [`scripts/load_recipes.py`](scripts/load_recipes.py), setup notes below |
+| **Ingredient resolution** | Parse → retrieve → judge → grams → macros. A polished draft is useless until lines resolve to real `fdc_id`s and gram weights | [`scripts/portion_pipeline_feasibility.py`](scripts/portion_pipeline_feasibility.py), [`docs/portion_resolution_roadmap.md`](docs/portion_resolution_roadmap.md) |
+| **Human-in-the-loop caches** | Curator UIs for FoodOn labels, dequant/FDC portion caches, and grounding eval corrections—because missingness and bad links cap everything downstream | [`foodon_cache_ui/`](foodon_cache_ui/), [`dequant_cache_ui/`](dequant_cache_ui/), [`eval_fdc_grounding_ui/`](eval_fdc_grounding_ui/) |
+| **GPU batch resolution** | On-demand EC2 + Qwen for large corpus grounding, S3 artifacts, gate-then-scale runs | [`ec2/`](ec2/) |
+| **Soft vs hard constraints** | Soft nutrient slack can trade a small miss for typicality; dietary tags and dish identity stay hard | [`docs/recipe_opt_agent.md`](docs/recipe_opt_agent.md), [`recipe_opt_agent/requirement_tags.py`](recipe_opt_agent/requirement_tags.py) |
+| **Eval as product surface** | Shared FDC scoring for agent vs one-shot frontier models; suites for macros, dietary bans, and identity under stretch targets | [`tests/run_eval_suite.py`](tests/run_eval_suite.py), [`docs/ischool_project_gallery_submission.md`](docs/ischool_project_gallery_submission.md) |
+
+**Takeaway for hiring managers:** the interesting work is the *system*—how grounding quality, neighborhood geometry, and optimizer incentives interact—not a single clever prompt.
+
+---
+
+## Production deployment (where to look)
+
+| Surface | Detail | Paths |
+|---------|--------|-------|
+| **Live staging** | [macroiq.org](http://macroiq.org) — Dockerized FastAPI app on EC2 (host `:80` → container `:8000`) | [`docs/ECR_EC2_DEPLOY.md`](docs/ECR_EC2_DEPLOY.md) |
+| **CI → registry** | Push to `deployment` builds `linux/amd64` and pushes to ECR (`macroiq:<sha>` and `:deployment`) | [`.github/workflows/push-ecr.yml`](.github/workflows/push-ecr.yml), [`Dockerfile`](Dockerfile) |
+| **Deploy scripts** | Pull image, systemd unit, start/stop staging without leaving GPU/demo spend running | [`scripts/deploy/`](scripts/deploy/), [`infra/aws/`](infra/aws/) |
+| **Product surfaces** | MacroIQ UI, developer playground with live LangGraph transcript, loop demo, personal pantry lab | [`recipe_opt_web/`](recipe_opt_web/) |
+| **Data plane** | Supabase for nutrition + neighborhood caches; S3 for batch artifacts; secrets at runtime, not baked into the image | [`docs/AWS_WORKFLOW.md`](docs/AWS_WORKFLOW.md) |
+
+Staging is **on-demand**—we stop EC2 when idle. That is intentional cost control, not an unfinished deploy story.
+
+---
+
+## Results (honest)
+
+We compared MacroIQ to one-shot **GPT-5.5** on the same requests and macro boxes, with **shared USDA grounding** so both sides are scored the same way. Metrics: holistic quality (LLM judge), ingredient-ratio fidelity to real dishes (lower is better), and nutrient-box loss (lower is better).
+
+- MacroIQ wins **ratio** and **nutrient** fit in every reported suite.  
+- On **preserve identity**, holistic **5.80** sits next to a human-recipe reference mean of **5.85** (GPT-5.5: **3.92**).  
+- Under **dietary restrictions**, MacroIQ leads on all three metrics.  
+- On **general quality**, GPT-5.5 can edge holistic slightly; MacroIQ still leads on the measurable fit metrics that keep a meal honest after measurement.
+
+Concrete failure modes for one-shot drafts show up in head-to-heads: missing a protein box after resolution, collapsing a no-pork request into a spice pile, or drifting far from typical proportions. The agent’s edit-and-remeasure loop is built to catch those before a suggestion is shown.
+
+Full table and framing: [`docs/ischool_project_gallery_submission.md`](docs/ischool_project_gallery_submission.md) · walkthrough cases: [`docs/agent_vs_gpt55_presentation_wins.md`](docs/agent_vs_gpt55_presentation_wins.md).
+
+We also document where we do **not** win every suite or metric—see [`docs/canonical_unconstrained_eval.md`](docs/canonical_unconstrained_eval.md). Grounding quality (~71% FDC+grams on a gated sample) remains the binding constraint on corpus coverage.
+
+---
+
+## Stack
+
+**Python 3.11** · **FastAPI / Uvicorn** · **LangGraph** · **CVXPY** · **OpenAI API** · **NumPy / SciPy** · **sentence-transformers** · **Supabase Postgres / pgvector** · **Docker** · **AWS (ECR, EC2, S3)** · **GitHub Actions** · **uv** · HTML/JS product UIs  
+
+GPU batch path: vLLM / Transformers (Qwen3) on EC2. Dependency groups and extras: [`pyproject.toml`](pyproject.toml).
+
+---
+
+## Explore the repo
+
+| If you care about… | Start here |
+|--------------------|------------|
+| Product experience | [`recipe_opt_web/`](recipe_opt_web/), [macroiq.org](http://macroiq.org) |
+| Agent architecture | [`recipe_opt_agent/`](recipe_opt_agent/), [`docs/recipe_opt_agent.md`](docs/recipe_opt_agent.md) |
+| Optimizer math | [`scripts/weighted_empirical_opt.py`](scripts/weighted_empirical_opt.py), [`scripts/hull_geometry.py`](scripts/hull_geometry.py) |
+| Grounding pipeline | [`scripts/portion_pipeline_feasibility.py`](scripts/portion_pipeline_feasibility.py) |
+| Deploy path | [`docs/ECR_EC2_DEPLOY.md`](docs/ECR_EC2_DEPLOY.md), [`Dockerfile`](Dockerfile) |
+| Eval story | [`docs/ischool_project_gallery_submission.md`](docs/ischool_project_gallery_submission.md) |
+| Demo video (local asset) | [`docs/animated_demo_stage_v8.mp4`](docs/animated_demo_stage_v8.mp4) |
+
+---
+
+## Quick start (collaborators)
 
 ```bash
-cd Capstone
-cp .env.example .env   # fill in PG_PASSWORD, PG_POOL_USER, PG_POOL_HOST
-
-# MVP runtime only (~96 packages; matches Docker image)
-uv sync
-
-# Full local environment (notebooks, batch pipeline scripts, tests)
+# Environment
+cp .env.example .env          # OPENAI_API_KEY; PG_* if using Supabase
 uv sync --extra notebook --extra pipeline --extra dev
-```
 
-### Run scripts inside the project environment
-
-Prefix commands with `uv run` so the correct interpreter and packages are used:
-
-```bash
-uv run python scripts/infer_schema.py
-uv run python scripts/load_recipes.py
-uv run python scripts/load_food_density.py
-```
-
-You can also activate the venv directly:
-
-```bash
-source .venv/bin/activate
-python scripts/infer_schema.py
-```
-
-### Add or upgrade packages
-
-Add a new runtime dependency (updates `pyproject.toml` and `uv.lock`):
-
-```bash
-uv add requests
-```
-
-Add a dev-only dependency:
-
-```bash
-uv add --dev pytest ruff
-```
-
-Upgrade a package to the latest compatible version:
-
-```bash
-uv add --upgrade pandas
-```
-
-Remove a package:
-
-```bash
-uv remove pandas
-```
-
-After any `uv add` / `uv remove`, commit both `pyproject.toml` and `uv.lock`. Teammates run `uv sync` to match.
-
-### Other useful uv commands
-
-| Command | What it does |
-|---------|----------------|
-| `uv sync` | Install MVP runtime deps from lockfile into `.venv` |
-| `uv sync --extra notebook --extra pipeline --extra dev` | Install notebooks, batch pipeline, and test deps |
-| `uv lock` | Refresh `uv.lock` after hand-editing `pyproject.toml` |
-| `uv pip install -r requirements.txt` | Install from `requirements.txt` if you use that file |
-| `uv run <cmd>` | Run a command in the project environment |
-| `uv python pin 3.11` | Pin local Python version (see `.python-version`) |
-
-Current project dependencies: `numpy`, `pandas`, `pdfplumber`, `psycopg2-binary`.
-
----
-
-## Recipe optimization agent (partner guide)
-
-Branch: **`agent_dev`**. This is the LangGraph recipe optimizer (neighborhood + creative modes) with a web playground.
-
-Deeper design notes live in [`docs/recipe_opt_agent.md`](docs/recipe_opt_agent.md). LangSmith eval notes: [`docs/recipe_opt_agent_langsmith.md`](docs/recipe_opt_agent_langsmith.md).
-
-### 1. Checkout and install
-
-```bash
-git checkout agent_dev
-git pull
-uv sync --extra notebook --extra pipeline --extra dev
-cp .env.example .env
-```
-
-In `.env`, set at least:
-
-```bash
-OPENAI_API_KEY=sk-...          # required for live LLM steps
-# optional:
-# LANGSMITH_TRACING=true
-# LANGSMITH_API_KEY=lsv2_...
-# LANGSMITH_PROJECT=recipe-opt-agent-eval
-```
-
-Supabase/`PG_*` vars are only needed if you use `RECIPE_DATA_SOURCE=db`. Prefer **local** data (default) — quota is limited.
-
-### 2. Local recipe store (recommended)
-
-The agent reads a filtered cap40 parquet dump under `Data/recipe_local_store/cap40/` (gitignored). Get it once by either:
-
-- copying that folder from a teammate who already downloaded it, or
-- downloading from Supabase (needs `PG_*` in `.env`):
-
-```bash
+# Optional local recipe store (preferred over DB for demos)
 PYTHONPATH=scripts:. uv run python scripts/download_cap40_recipe_store.py
-```
+export RECIPE_DATA_SOURCE=local
 
-Then keep the default data source:
-
-```bash
-export RECIPE_DATA_SOURCE=local   # default if unset
-# export RECIPE_DATA_SOURCE=db    # only if you intentionally want Supabase
-```
-
-FoodOn caches under `foodon_web/cache/` ship with the repo after `git pull`.
-
-### 3. Web UI (primary way to use it)
-
-```bash
+# Product UI
 PYTHONPATH=scripts:. uv run python -m recipe_opt_web --reload
-# → http://127.0.0.1:8010
+# → http://127.0.0.1:8010            MacroIQ
+# → http://127.0.0.1:8010/playground developer playground
+# → http://127.0.0.1:8010/personal   pantry → plate lab
 ```
 
-**How to run a dish**
-
-1. Choose **Neighborhood** (classic dish) or **Creative** (free-text request).
-2. **Neighborhood:** pick a canonical dish from the searchable dropdown (e.g. Spaghetti Carbonara, Fried Rice).
-3. Set the **protein / carb / fat** calorie-fraction box (defaults are fine for a first try).
-4. Optionally tune `F_accept` / `F_max` / max iterations.
-5. Click **Run**. The UI streams:
-   - neighborhood load / start-recipe selection
-   - LangGraph steps (`diagnose` → `propose` → `decide` / auto-apply → `apply` → …)
-   - final grams, ratio loss, nutrient (box) slack, and a gpt-4o run summary button
-
-**Creative mode:** type a request like `high-protein vegetarian carbonara`, set the macro box, run. The agent drafts → grounds to FDC → same diagnose loop.
-
-More UI detail: [`recipe_opt_web/README.md`](recipe_opt_web/README.md).
-
-### 4. CLI (optional)
+Offline agent smoke:
 
 ```bash
-# Offline fixture (no OpenAI / no local store required)
 PYTHONPATH=scripts:. uv run python -m recipe_opt_agent \
   --fixture tests/fixtures/recipe_opt/synthetic_problem.json \
   --out scratch/recipe_opt_runs/demo.json
 
-# Live neighborhood dish (needs local store + OPENAI_API_KEY)
-PYTHONPATH=scripts:. uv run python -m recipe_opt_agent \
-  --canonical-id 443 \
-  --taste "classic carbonara" \
-  --out scratch/recipe_opt_runs/carbonara.json
-```
-
-Useful IDs once the store is loaded: `443` Spaghetti Carbonara, `193` Fried Rice (see the web dropdown for the full list).
-
-### 5. Quick sanity checks
-
-```bash
-# Agent graph unit tests (offline)
 PYTHONPATH=scripts:. uv run pytest tests/test_recipe_opt_agent_graph.py -q
-
-# Smoke eval suite (offline artifacts)
-PYTHONPATH=scripts:. uv run python tests/run_eval_suite.py
 ```
 
-### 6. Common issues
+Deeper partner setup (data loaders, USDA `\copy`, embeddings, AWS cost notes): historically covered in this README’s data sections—see [`docs/AWS_WORKFLOW.md`](docs/AWS_WORKFLOW.md), [`sql/`](sql/), and [`recipe_opt_web/README.md`](recipe_opt_web/README.md).
 
-| Symptom | Fix |
-|---------|-----|
-| `Local recipe store missing` | Run `download_cap40_recipe_store.py` (needs DB once) |
-| Heuristic / no LLM calls | Set `OPENAI_API_KEY` in `.env` |
-| Slow first neighborhood load | Expected: FoodOn index + optional cache miss; later runs use neighborhood cache |
-| Hitting Supabase quota | Confirm `RECIPE_DATA_SOURCE=local` (or unset) |
+### Data sources (attribution)
+
+- **USDA FoodData Central** — U.S. Department of Agriculture  
+- **RecipeNLG / Open Recipes** — see original dataset terms  
+- **FoodOn** — food ontology  
+- **FAO/INFOODS Density Database v2.0** — volume ↔ mass factors  
+
+Raw dumps under `Data/` are gitignored (multi‑GB).
 
 ---
 
-## Loading data
+## Acknowledgements
 
-### 1. USDA (SQL + psql)
-
-Requires [PostgreSQL client](https://www.postgresql.org/download/) (`psql`). From repo root:
-
-```bash
-./sql/load_all.sh
-```
-
-Runs, in order: `00_create_schema.sql` → reference/food COPY scripts → `99_create_indexes.sql`. Expect a long run for `food_nutrient.csv`.
-
-### 2. Recipes (Python)
-
-```bash
-uv run python scripts/load_recipes.py              # full load
-uv run python scripts/load_recipes.py --extract-only   # not applicable (JSON/CSV only)
-uv run python scripts/load_recipes.py --nlg-only       # resume RecipeNLG after partial load
-```
-
-### 3. Recipe embeddings (Python)
-
-Streams local `Data/recipes/RecipeNLG.csv` in chunks (does not load 2.2M rows from Supabase). Uploads only ids present in `recipe.recipe_nlg`. Enable **pgvector** first.
-
-```bash
-uv run python scripts/load_recipe_embeddings.py --limit 5000   # smoke test
-uv run python scripts/load_recipe_embeddings.py                  # full CSV → DB
-```
-
-### 4. Recipe deduplication (Python)
-
-Kadin's hybrid pipeline from `exploration.ipynb`. **Dry-run first**, then delete:
-
-```bash
-uv run python scripts/dedupe_recipe_nlg.py --dry-run
-uv run python scripts/dedupe_recipe_nlg.py --limit 10000 --dry-run
-uv run python scripts/dedupe_recipe_nlg.py --execute
-```
-
-Phase 1 removes exact duplicates (same title + ingredients + directions). Phase 2 uses MiniLM/FAISS/hybrid scoring and keeps one recipe per cluster (most ingredients, then longest directions). Manifests: `Data/dedup/`. Use `--use-db-embeddings` if vectors are already loaded.
-
-### 5. Food density / conversions (Python)
-
-```bash
-uv run python scripts/load_food_density.py           # PDF → CSV → DB
-uv run python scripts/load_food_density.py --extract-only
-uv run python scripts/load_food_density.py --load-only
-```
-
-CSV output: `Data/conversions/food_density.csv`.
-
-### 6. Schema introspection
-
-```bash
-uv run python scripts/infer_schema.py
-uv run python scripts/infer_schema.py --schema usda --out scripts/usda_schema_inferred.json
-```
-
----
-
-## Environment variables
-
-| Variable | Description |
-|----------|-------------|
-| `PG_PASSWORD` | Database password |
-| `PG_POOL_USER` | Pooler user, e.g. `postgres.<project-ref>` |
-| `PG_POOL_HOST` | Pooler host |
-| `PG_POOL_SESSION_PORT` | Session pooler (default `5432`) |
-| `PG_POOL_TRANSACTION_PORT` | Transaction pooler (`6543`) |
-| `PG_DATABASE` | Database name (default `postgres`) |
-| `PG_SSL_MODE` | SSL mode (default `require`) |
-| `PG_PSQL_USE_TRANSACTION_POOLER_PORT` | Set to `1` to use port 6543 in Python loaders |
-
----
-
-## Obtaining raw data
-
-Place files under `Data/` (not tracked in git):
-
-1. **USDA:** [FoodData Central download](https://fdc.nal.usda.gov/download-datasets) → “Full download of all data types” (April 2026) → unzip into `Data/All_Food_Data_April_2026/`.
-2. **Recipes:** [Open-Recipes Repo](https://github.com/jakevdp/open-recipe-data/tree/main) `open_recipes.json` and [RecipeNLG Dataset](https://recipenlg.cs.put.poznan.pl/) `RecipeNLG.csv` under `Data/recipes/`.
-3. **Density:** [Density PDF](https://www.fao.org/4/ap815e/ap815e.pdf) `food_density.pdf` in `Data/` (or use the copy already there).
-
----
-
-## Ingredient resolution pipeline (`fdc_id` + `gram_weight`)
-
-Each RecipeNLG ingredient line is resolved to a USDA **`fdc_id`** (`llm_fdc_id` in artifacts) and a **`grams`** value (gram weight for that line’s quantity). The pipeline is orchestrated by `scripts/portion_pipeline_feasibility.py` and logged to MLflow experiment `portion_pipeline_feasibility`.
-
-### End-to-end flow
-
-```mermaid
-flowchart TD
-  A[RecipeNLG ingredient line] --> B[Rules parse + ResolutionPlan]
-  B --> C{Needs line enrichment?}
-  C -->|yes| D[Line enrichment LLM]
-  C -->|no| E[Amount kind final]
-  D --> E
-  E --> F[Portion-aware retrieval]
-  F --> G[FDC judge LLM v4]
-  G --> H[resolve_grams_from_plan]
-  H --> I{rules_grams_status = no_portion?}
-  I -->|yes, volume/count| J[Portion pick LLM rescue]
-  I -->|no| K[pipeline_matches.parquet]
-  J --> K
-  K --> L[feasibility_report.json]
-```
-
-| Phase | Script / module | Output |
-|-------|-----------------|--------|
-| 1. Parse + plan | `recipe_parse_rules.py`, `resolution_plan.py`, `line_enrichment_llm.py` | `amount_classification.parquet` |
-| 2. Retrieval + judge | `portion_aware_match.py`, `ingredient_match_llm_portion.py` | `judge_matches_raw.parquet` |
-| 3. Rules grams | `portion_gram.py` (`resolve_grams_from_plan`) | `rules_grams`, `rules_grams_status` |
-| 4. Portion LLM rescue | `portion_resolve_llm.py` | Updates `grams` when rules returned `no_portion` |
-| 5. Report | `portion_pipeline_feasibility.py`, `feasibility_mlflow.py` | `feasibility_report.json`, MLflow run |
-
-**Gram resolution ladder** (`portion_gram.py`): tries embedded/explicit mass → volume portion → count portion (with container-mass and whole-item fallbacks) → terminal flags (`vague_amount`, `ambiguous_accepted`, `negligible_calories`) → `no_portion` if nothing worked. Judge-time resolution uses the LLM’s optional `matched_portion_id`.
-
-### Running the feasibility pipeline
-
-Requires local `Data/recipes/RecipeNLG.csv`, USDA data in Supabase, and `.env` configured.
-
-```bash
-# Full 1,000-recipe sample (seed 42)
-uv run python scripts/portion_pipeline_feasibility.py --n-recipes 1000 --seed 42
-
-# v4 retry: re-judge only former no_portion rows (writes to separate dir)
-uv run python scripts/portion_pipeline_feasibility.py \
-  --n-recipes 1000 --seed 42 --only-no-portion --force-payloads \
-  --baseline-dir scratch/EDA/portion_feasibility_1000
-
-# Golden regression tests (no API)
-uv run python tests/test_portion_resolution_cases.py
-```
-
-Artifacts land under `scratch/EDA/portion_feasibility_1000_v4_no_portion/` (v4 run; baseline dir is read-only). Large caches (`payloads.pkl`, `recipe_cache/`, parquets) are gitignored — regenerate locally.
-
-### Latest run results (v4, 1,000 recipes / seed 42)
-
-Prompt version: `v4_portion_good_enough`. Merged output: **6,095** preserved v3 lines + **2,659** v4 re-judged `no_portion` lines = **8,754** ingredient lines.
-
-#### Headline metrics
-
-| Metric | Value | Meaning |
-|--------|------:|---------|
-| **`fdc_and_gram_rate_all`** | **71.1%** | Lines with both `llm_fdc_id` and `grams` |
-| `fdc_match_rate_all` | 88.0% | Lines with any fdc match |
-| `gram_resolve_rate_all` | 71.1% | Lines with non-null `grams` |
-| `fdc_and_gram_rate_needs_portion` | 75.7% | Same, on 7,466 volume/count lines |
-| `rules_gram_rate_needs_portion_given_fdc` | 80.9% | Rules resolve grams when fdc exists |
-| `llm_portion_rescue_rate_needs_portion` | 4.9% | Second-pass portion LLM saved grams |
-| `no_portion_rate` | 3.9% (345 lines) | Still unresolved after all passes |
-| `judge_error_count` | 6 | Hard API failures |
-
-**Improvement vs baseline v3:** 58.7% → **71.1%** fdc+grams (+12.4 pp). `no_portion` dropped from 2,659 → **345** globally after v4 judge + portion LLM rescue (324 rescues → `ok_count_portion_llm`).
-
-#### By amount kind
-
-| Kind | Lines | fdc + grams |
-|------|------:|------------:|
-| Volume | 4,909 | **81.2%** |
-| Mass | 963 | **89.1%** |
-| Count | 2,242 | **61.5%** |
-| Unknown | 640 | 0.0% |
-
-Count resolution is the main weakness; volume and mass are strong.
-
-#### Remaining failures (`grams` null)
-
-| `grams_status` | Lines | Notes |
-|----------------|------:|-------|
-| `missing_fdc` | 2,152 | Judge abstained or sentinel `999000001` (no gram path) |
-| `no_portion` | 345 | Has fdc, all portion paths failed |
-| `vague_amount` | 16 | “to taste”, no quantity |
-| `unresolvable_serving_only` | 11 | USDA only has serving portions |
-| `ambiguous_accepted` | 4 | Deliberately skipped |
-| `bad_unit` | 4 | e.g. gallons |
-
-`no_portion` is only one failure mode — lines can lack grams for other reasons and were **not** included in the v4 `--only-no-portion` retry.
-
-#### Recipe-level (MVP)
-
-| Bucket | Recipes | % of 1,000 |
-|--------|--------:|-----------:|
-| **All lines gram-resolved** | **106** | **10.6%** |
-| All but 1 unresolved | 248 | 24.8% |
-| ≤1 unresolved | 354 | 35.4% |
-| Median unresolved lines / recipe | 2 | — |
-
-**MVP candidate set:** 106 recipes where every ingredient line has `grams` (634 lines total). See recipe-level EDA below.
-
-#### Sample provenance (RecipeNLG metadata)
-
-| NLG `source` | Recipes |
-|--------------|--------:|
-| Gathered | 737 |
-| Recipes1M | 263 |
-
-Top link domains in the 1,000-recipe sample: `cookbooks.com` (379), `food.com` (266), `epicurious.com` (59), …
-
-### EDA notebooks (start here)
-
-Your partner should open these with Jupyter kernel cwd = `Capstone/` or `scratch/EDA/`:
-
-| Notebook | Purpose |
-|----------|---------|
-| **[scratch/EDA/portion_feasibility_run_eda.ipynb](scratch/EDA/portion_feasibility_run_eda.ipynb)** | Line-level EDA: resolution rates, `grams_status` breakdown, amount-kind charts |
-| **[scratch/EDA/portion_feasibility_v4_recipe_eda.ipynb](scratch/EDA/portion_feasibility_v4_recipe_eda.ipynb)** | **Recipe-level EDA:** 106 fully resolved recipes, all-but-one counts, domain breakdown |
-| [scratch/EDA/count_portion_eda.ipynb](scratch/EDA/count_portion_eda.ipynb) | Deep dive on count-portion matching |
-| [scratch/EDA/usda_portion_and_recipe_feasibility.ipynb](scratch/EDA/usda_portion_and_recipe_feasibility.ipynb) | Earlier USDA portion feasibility exploration |
-
-v4 run artifacts (local, not in git): `scratch/EDA/portion_feasibility_1000_v4_no_portion/` — `pipeline_matches.parquet`, `feasibility_report.json`, `judge_matches_raw.parquet`.
-
-### Design docs
-
-- **[docs/portion_resolution_roadmap.md](docs/portion_resolution_roadmap.md)** — implemented vs deferred features, metrics to track
-
-### Key scripts
-
-| Script | Role |
-|--------|------|
-| `portion_pipeline_feasibility.py` | Full feasibility orchestration + report |
-| `ingredient_match_llm_portion.py` | Portion-aware retrieval + FDC judge |
-| `portion_gram.py` | Gram resolution ladder + fallbacks |
-| `portion_aware_match.py` | Tiered retrieval blending semantic + portion scores |
-| `portion_resolve_llm.py` | LLM portion pick for `no_portion` rescue |
-| `resolution_plan.py` | Multi-path resolution plans per ingredient line |
-| `feasibility_mlflow.py` | Auto-incrementing `feasibility_version` + MLflow logging |
-
----
-
-## MVP web app + Strands agent
-
-Interactive recipe recommendation UI backed by the MVP corpus (106 fully gram-resolved recipes).
-
-```bash
-uv run uvicorn mvp_web.server:app --reload --port 8000
-```
-
-Open `http://127.0.0.1:8000`. The `/api/recommend` endpoint streams SSE stages (`embed_query` → `stage1_rank` → `optimize` → `judge` → `format_result`).
-
-**Strands agent (default on `agent_mvp`):** Bedrock (Nova Lite) orchestrates five pipeline tools; OpenAI `gpt-4o-mini` still runs the final judge step.
-
-| Env var | Default | Purpose |
-|---------|---------|---------|
-| `MVP_AGENT_ENABLED` | `1` | Use Strands agent (`0` = legacy `run_pipeline`) |
-| `AWS_REGION` | `us-east-1` | Bedrock region |
-| `BEDROCK_MODEL_ID` | `us.amazon.nova-lite-v1:0` | Orchestrator model |
-| `OPENAI_API_KEY` | — | Judge tool |
-
-Requires `aws login` (or `AWS_PROFILE`) with Bedrock `InvokeModel` access. If the agent stops early, a deterministic tool fallback completes the pipeline.
-
-Agent code: `mvp_agent/` (`tools.py`, `runner.py`, `context.py`).
-
-### Dependencies
-
-| Group | Packages | Used by |
-|-------|----------|---------|
-| **MVP runtime** (`project.dependencies`) | fastapi, uvicorn, numpy, pandas, sentence-transformers, torch (CPU), cvxpy, openai, boto3, strands-agents, psycopg2-binary, pgvector | `mvp_web/`, `mvp_agent/`, `scripts/mvp_*.py` |
-| **notebook** extra | ipykernel, nbformat, matplotlib, plotly | Jupyter notebooks |
-| **pipeline** extra | mlflow, faiss-cpu, scikit-learn, pyarrow, pdfplumber, … | Batch loaders, EDA, feasibility scripts |
-| **dev** extra | pytest | Unit tests |
-
-### Docker
-
-CPU-only PyTorch (no CUDA/NVIDIA wheels). Build and push to ECR:
-
-```bash
-chmod +x scripts/deploy/push_mvp_ecr.sh
-./scripts/deploy/push_mvp_ecr.sh
-```
-
-Build and run locally (requires `.env` with Supabase credentials):
-
-```bash
-docker build -t capstone-mvp:local .
-docker run --rm -p 8000:8000 --env-file .env capstone-mvp:local
-```
-
-On Apple Silicon targeting x86 ECS/Fargate, add `--platform linux/amd64` to `docker build`.
-
-Smoke test:
-
-```bash
-curl -s http://localhost:8000/health | python -m json.tool
-```
-
-Push to ECR:
-
-```bash
-export AWS_REGION=us-east-1
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-export ECR_REPO=capstone-mvp
-
-aws ecr create-repository --repository-name $ECR_REPO --region $AWS_REGION  # once
-aws ecr get-login-password --region $AWS_REGION | \
-  docker login --username AWS --password-stdin \
-  $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-
-docker tag capstone-mvp:local \
-  $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:latest
-```
-
-Secrets (`.env`) are passed at runtime, not baked into the image. Corpus cache is built at startup from Supabase.
-
----
-
-## AWS deploy (optional)
-
-Local dev on your Mac; S3 for datasets/artifacts; on-demand EC2 for staging demos.
-See **[docs/AWS_WORKFLOW.md](docs/AWS_WORKFLOW.md)** for costs, partner workflow, and commands.
-
-```bash
-./infra/aws/bootstrap.sh --s3-only    # S3 buckets only (no EC2 cost)
-./scripts/deploy/load_to_s3.sh --all  # upload Data/ + artifacts
-```
-
----
-
-## License & attribution
-
-- USDA FoodData Central — U.S. Department of Agriculture  
-- Open Recipes / RecipeNLG — see original dataset terms  
-- FAO/INFOODS Density Database v2.0 — FAO/INFOODS
+Built for the UC Berkeley I School / MIDS Capstone program. Thanks to instructors, partners, and classmates who cooked, tasted, and argued with the agent’s suggestions—and to the public nutrition and recipe corpora that make grounded cooking AI possible.
