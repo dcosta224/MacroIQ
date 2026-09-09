@@ -2,7 +2,7 @@
 
 UC Berkeley MIDS Capstone (Summer 2026) · Daniel Costa, Kadin Wilkins
 
-**[Project write-up](https://www.ischool.berkeley.edu/programs/mids/capstone/2026b-summer/macroiq-0)** · **[MVP Live Demo](http://macroiq.org)** · **[Product UI](recipe_opt_web/)** · **[Agent](recipe_opt_agent/)**
+**[Project Write-Up](https://www.ischool.berkeley.edu/programs/mids/capstone/2026b-summer/macroiq-0)** · **[MVP Live Demo](http://macroiq.org)** · **[Product UI](recipe_opt_web/)** · **[Agent](recipe_opt_agent/)**
 
 ## Problem & Motivation
 
