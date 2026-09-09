@@ -1,6 +1,7 @@
 # MacroIQ
 
 UC Berkeley MIDS Capstone (Summer 2026) · Daniel Costa, Kadin Wilkins
+**[Project write-up](https://www.ischool.berkeley.edu/programs/mids/capstone/2026b-summer/macroiq-0)** · **[MVP Live Demo](http://macroiq.org)** · **[Product UI](recipe_opt_web/)** · **[Agent](recipe_opt_agent/)**
 
 ## Problem & Motivation
 
@@ -19,10 +20,6 @@ MacroIQ is an agentic recipe design system that bridges the gap between language
 This approach allows MacroIQ to generate recipes that simultaneously satisfy macronutrient targets, accommodate dietary restrictions, and preserve dish identity while remaining explainable to the user. Every recommendation is accompanied by evidence showing how ingredient choices compare with similar real recipes and whether nutrition goals have actually been achieved.
 
 Users interact with MacroIQ by naming a dish, specifying nutritional targets and dietary preferences, and observing the agent progressively redesign the recipe. Rather than producing a single opaque answer, the system exposes each optimization step, allowing users to both understand and trust why a recommendation was made.
-
----
-
-**[Project write-up](https://www.ischool.berkeley.edu/programs/mids/capstone/2026b-summer/macroiq-0)** · **[MVP Live Demo](http://macroiq.org)** · **[Product UI](recipe_opt_web/)** · **[Agent](recipe_opt_agent/)**
 
 ---
 
