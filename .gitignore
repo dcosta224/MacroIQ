@@ -16,5 +16,25 @@ mlflow.db
 *.png
 *.npy
 *.parquet
+*.pkl
+
+# Deploy secrets (real account/bucket IDs)
+deploy/aws.env
+
+# Runtime caches
+mvp_web/cache/
+
+# Large generated scratch artifacts (EDA notebooks may be tracked individually)
+scratch/colab_bundle_staging/
+scratch/EDA/_local_backup/
+scratch/EDA/portion_feasibility_1000/
+scratch/EDA/portion_feasibility_1000_v4_no_portion/
+scratch/parse_experiments/
+scratch/recipe_matching_10k/
+scratch/recipe_matching_llm_100_portion/
+scratch/portion_summaries_by_fdc.json
+
+# Installers
+AWSCLIV2.pkg
 
 .DS_Store

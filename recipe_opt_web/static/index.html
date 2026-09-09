@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recipe Opt Agent</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app-shell" id="app-shell">
+    <header class="app-header">
+      <h1>Recipe Opt Agent</h1>
+      <p>Run the LangGraph diagnose → decide → modify loop. Watch the flow graph and LLM rationale update live.</p>
+    </header>
+
+    <form id="run-form" class="run-form" novalidate>
+      <section class="panel">
+        <h2>Agent mode</h2>
+        <div class="row controls">
+          <label class="check">
+            <input type="radio" name="agent_mode" id="mode_neighborhood" value="neighborhood" checked />
+            Neighborhood (canonical start)
+          </label>
+          <label class="check">
+            <input type="radio" name="agent_mode" id="mode_creative" value="creative" />
+            Creative / OOD (LLM warm-start)
+          </label>
+        </div>
+      </section>
+
+      <section class="panel" id="creative-panel" hidden>
+        <h2>Creative request</h2>
+        <p class="hint">Free-text recipe intent (e.g. “40% protein carbonara, no pork”). Optionally pick a canonical dish below for neighborhood FDC catalog.</p>
+        <label>
+          User request
+          <textarea id="user_request" rows="3" placeholder="High-protein vegetarian carbonara with 40% protein…"></textarea>
+        </label>
+      </section>
+
+      <section class="panel">
+        <h2>Recipe (canonical neighborhood)</h2>
+        <p class="hint" id="canonical-hint">
+          Search the full canonical catalog (not limited to top 50). Required for neighborhood mode;
+          optional in creative mode for FDC catalog + basis samples.
+        </p>
+        <div class="canonical-search-wrap" id="canonical_search_wrap">
+          <label for="canonical_search_input">Canonical recipe</label>
+          <input
+            type="text"
+            id="canonical_search_input"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Search all canonical recipes…"
+          />
+          <input type="hidden" id="canonical_id" value="" />
+          <ul id="canonical_results" class="canonical-results hidden" role="listbox" aria-label="Canonical search results"></ul>
+        </div>
+        <p class="hint" id="canonical-meta">—</p>
+        <div class="row controls" id="start-metric-row">
+          <span class="hint" style="margin:0">Start recipe by</span>
+          <label class="check">
+            <input type="radio" name="start_metric" id="start_metric_l1" value="l1_pfc" checked />
+            L1 PFC distance
+          </label>
+          <label class="check">
+            <input type="radio" name="start_metric" id="start_metric_loss" value="loss_projection" />
+            Loss projection (precomputed)
+          </label>
+        </div>
+        <p class="hint" id="start-metric-hint">
+          L1 uses resolved calorie fractions vs your macro box (fast). Loss projection reads
+          <code>recipe.recipe_loss_fields</code> when available; otherwise falls back to L1.
+        </p>
+      </section>
+
+      <section class="panel">
+        <h2>Macro targets (%)</h2>
+        <p class="hint">Enter calorie-share percents (e.g. 19). Defaults are rounded for display; unchanged defaults still map to the exact 0–1 fractions the optimizer uses.</p>
+        <div class="targets-grid">
+          <div class="target-col">
+            <h3>Protein %</h3>
+            <label class="minmax-row"><span>Min</span><input type="number" id="protein_min" value="19" min="0" max="100" step="1" /></label>
+            <label class="minmax-row"><span>Max</span><input type="number" id="protein_max" value="23" min="0" max="100" step="1" /></label>
+          </div>
+          <div class="target-col">
+            <h3>Carbs %</h3>
+            <label class="minmax-row"><span>Min</span><input type="number" id="carb_min" value="35" min="0" max="100" step="1" /></label>
+            <label class="minmax-row"><span>Max</span><input type="number" id="carb_max" value="55" min="0" max="100" step="1" /></label>
+          </div>
+          <div class="target-col">
+            <h3>Fat %</h3>
+            <label class="minmax-row"><span>Min</span><input type="number" id="fat_min" value="25" min="0" max="100" step="1" /></label>
+            <label class="minmax-row"><span>Max</span><input type="number" id="fat_max" value="45" min="0" max="100" step="1" /></label>
+          </div>
+        </div>
+        <div class="macro-presets" id="macro-presets">
+          <p class="hint">Needs a selected neighborhood dish:</p>
+          <div class="row macro-preset-btns">
+            <button type="button" class="ghost" id="macro-preset-neighborhood-coverage" title="Per-macro 10% bands covering the most neighborhood recipes">
+              Cover neighborhood · 10% bands
+            </button>
+            <button type="button" class="ghost" id="macro-preset-neighborhood-mean" title="Mean nutrient profile of the neighborhood, ±5% box around each macro">
+              Neighborhood mean · ±5%
+            </button>
+          </div>
+          <p class="hint" id="macro-preset-status" aria-live="polite"></p>
+        </div>
+        <div class="row bands">
+          <label>F_accept <input type="number" id="F_accept" value="1.0" min="0.1" step="0.1" /></label>
+          <label>F_max <input type="number" id="F_max" value="1.5" min="0.1" step="0.1" /></label>
+          <label>Max iterations <input type="number" id="max_iterations" value="3" min="1" max="10" /></label>
+        </div>
+        <div class="row controls">
+          <label class="check">
+            <input type="checkbox" id="show_transcript" />
+            Show full transcript side panel
+          </label>
+          <p class="hint" id="health-hint">Checking API key…</p>
+        </div>
+      </section>
+
+      <button type="submit" id="run-btn">Run agent</button>
+      <p class="hint" id="run-status" aria-live="polite"></p>
+    </form>
+
+    <section class="panel live-steps-panel" id="live-steps-panel" aria-label="Live steps">
+      <div class="panel-head">
+        <h2>Live steps</h2>
+        <p class="hint">Open a step for tools, candidates, hull distance, and prompts.</p>
+      </div>
+      <div id="timeline" class="timeline"></div>
+    </section>
+
+    <section class="panel agent-flow-panel" id="agent-flow-panel">
+      <div class="panel-head">
+        <h2>Agent flow</h2>
+        <p class="hint" id="optimizer-note">
+          The weighted empirical optimizer runs inside <code>diagnose</code> (hull → solve → fidelity bands), not as a separate node.
+        </p>
+        <p class="hint">Click a node to inspect it on the right. Arrows follow the real graph: <code>propose → decide</code> (never <code>propose → finalize</code>).</p>
+        <div id="flow-legend" class="flow-legend" aria-label="Node compute kinds"></div>
+      </div>
+      <div id="flow-graph" class="flow-graph" aria-label="Agent flow graph"></div>
+      <p class="hint" id="flow-status">Idle</p>
+    </section>
+
+    <aside id="flow-inspector" class="flow-inspector" aria-live="polite" aria-label="Node inspector">
+      <div class="flow-inspector-empty">
+        <h3>Node inspector</h3>
+        <p class="hint">Select a node in the agent flow to see its purpose, tools, and prompts.</p>
+      </div>
+    </aside>
+
+    <section class="panel scores-panel" id="scores-panel">
+      <h2>Scores</h2>
+      <p class="hint" id="scores-hint">Blank until the agent diagnoses; then shows the best sample each iteration.</p>
+      <div id="display-scores" class="display-scores" aria-live="polite"></div>
+      <details id="loss-chart-details" class="loss-chart-details">
+        <summary>Loss evolution by suggestion type</summary>
+        <div class="loss-chart-controls">
+          <label>
+            Loss type
+            <select id="loss-chart-metric">
+              <option value="ratio_loss">Ratio loss</option>
+              <option value="nutrient_loss">Nutrient loss</option>
+            </select>
+          </label>
+        </div>
+        <div id="loss-chart" class="loss-chart" aria-label="Loss evolution chart"></div>
+      </details>
+    </section>
+
+    <section class="panel hidden result-panel" id="result-panel">
+      <h2>Final results</h2>
+      <p class="hint" id="path-finals-hint">Best in-distribution and OOD path answers from this run.</p>
+      <div id="path-finals" class="path-finals hidden"></div>
+      <div id="final-ingredients" class="final-ingredients hidden"></div>
+      <div id="finalist-cards" class="finalist-cards hidden"></div>
+      <div class="flow-summary-box">
+        <div class="row controls" style="align-items:center;gap:0.75rem;flex-wrap:wrap">
+          <button type="button" id="flow-summary-btn" class="ghost" disabled>
+            Summarize this run (gpt-4o)
+          </button>
+          <span class="hint" id="flow-summary-status">Available after a finished run.</span>
+        </div>
+        <div id="flow-summary" class="flow-summary hidden" aria-live="polite"></div>
+      </div>
+      <div class="run-chat-box" id="run-chat-box">
+        <div class="run-chat-head">
+          <h3>Ask about this run</h3>
+          <p class="hint" id="run-chat-status">Chat with gpt-4o about steps, losses, ingredients, and ID vs OOD paths.</p>
+        </div>
+        <div id="run-chat-messages" class="run-chat-messages" aria-live="polite"></div>
+        <form id="run-chat-form" class="run-chat-form">
+          <label class="sr-only" for="run-chat-input">Question about this run</label>
+          <textarea
+            id="run-chat-input"
+            rows="2"
+            placeholder="e.g. Why was the OOD chicken bundle not applied? How does ratio loss compare between paths?"
+            disabled
+          ></textarea>
+          <div class="run-chat-actions">
+            <button type="button" id="run-chat-clear" class="ghost" disabled>Clear chat</button>
+            <button type="submit" id="run-chat-send" disabled>Send</button>
+          </div>
+        </form>
+      </div>
+      <pre id="result-json"></pre>
+    </section>
+
+    <aside id="transcript-panel" class="transcript-panel hidden" aria-label="Full agent transcript">
+      <div class="transcript-head">
+        <h2>Full transcript</h2>
+        <button type="button" id="close-transcript" class="ghost">Hide</button>
+      </div>
+      <p class="hint">Prompts, tool outputs, retry triggers, and LLM reasoning in run order.</p>
+      <div id="transcript" class="transcript"></div>
+    </aside>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

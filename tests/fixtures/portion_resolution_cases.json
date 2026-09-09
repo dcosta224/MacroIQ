@@ -191,6 +191,14 @@
       "expected_status": "vague_amount"
     },
     {
+      "id": "mixed_nuts_no_quantity",
+      "description": "bare ingredient name without quantity is not gram-required",
+      "ingredient": "mixed nuts",
+      "parse": {"quantity": null, "unit": null, "name": "mixed nuts"},
+      "fdc_id": 1135713,
+      "expected_status": "no_quantity"
+    },
+    {
       "id": "parsley_chives_compound",
       "description": "compound parsley and chives with negligible calories skipped",
       "ingredient": "parsley and chives",
@@ -214,6 +222,87 @@
       "count_portion_index": {"500001": []},
       "raw_portion_rows": [],
       "expected_status": "ambiguous_accepted"
+    },
+    {
+      "id": "vinegar_tbsp_judge_portion",
+      "description": "volume honors judge matched_portion_id over wrong heuristic pick",
+      "ingredient": "1 Tbsp white wine vinegar",
+      "parse": {"quantity": 1, "unit": "Tbsp", "name": "white wine vinegar", "amount_kind": "volume"},
+      "fdc_id": 172237,
+      "matched_portion_id": 81500,
+      "portion_index": {
+        "172237": [
+          {
+            "portion_id": 81500,
+            "fdc_id": 172237,
+            "ref_amount": 1.0,
+            "ref_unit": "tbsp",
+            "gram_weight": 14.9,
+            "seq_num": 1,
+            "data_points": 10,
+            "modifier": "",
+            "portion_description": "",
+            "fndds_code_only": false,
+            "has_readable_text": true
+          },
+          {
+            "portion_id": 81501,
+            "fdc_id": 172237,
+            "ref_amount": 1.0,
+            "ref_unit": "cup",
+            "gram_weight": 238.0,
+            "seq_num": 2,
+            "data_points": 10,
+            "modifier": "",
+            "portion_description": "",
+            "fndds_code_only": false,
+            "has_readable_text": true
+          }
+        ]
+      },
+      "expected_status": "ok_volume_portion",
+      "expected_grams": 14.9
+    },
+    {
+      "id": "dry_white_wine_cup_via_fl_oz_portion",
+      "description": "1/2 c dry white wine uses Sauvignon Blanc fl oz USDA portion",
+      "ingredient": "1/2 c. dry white wine",
+      "parse": {"quantity": 0.5, "unit": "c", "name": "dry white wine", "amount_kind": "volume"},
+      "fdc_id": 173201,
+      "matched_portion_id": 92088,
+      "portion_index": {
+        "173201": [
+          {
+            "portion_id": 92088,
+            "fdc_id": 173201,
+            "ref_amount": 1.0,
+            "ref_unit": "fluid_ounce",
+            "gram_weight": 29.3,
+            "seq_num": 1,
+            "data_points": 10,
+            "modifier": "fl oz",
+            "portion_description": "",
+            "fndds_code_only": false,
+            "has_readable_text": true
+          },
+          {
+            "portion_id": 92089,
+            "fdc_id": 173201,
+            "ref_amount": 1.0,
+            "ref_unit": "fluid_ounce",
+            "gram_weight": 147.0,
+            "seq_num": 2,
+            "data_points": 10,
+            "modifier": "serving (5 fl oz)",
+            "portion_description": "",
+            "fndds_code_only": false,
+            "has_readable_text": true
+          }
+        ]
+      },
+      "expected_status": "ok_volume_portion",
+      "expected_grams_min": 117.0,
+      "expected_grams_max": 120.0
     }
   ]
 }

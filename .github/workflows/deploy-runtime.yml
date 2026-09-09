@@ -1,0 +1,58 @@
+# Manual-only hook to deploy the ECR image to a runtime later.
+# Does NOT run on push. Does NOT create App Runner/ECS by itself.
+#
+# To enable later:
+#   1. Create an App Runner (or ECS) service pointed at ECR macroiq:deployment
+#   2. Add GitHub Actions variable APP_RUNNER_SERVICE_ARN (or extend this job)
+#   3. Ensure AWS credentials can call apprunner:StartDeployment
+#   4. Run this workflow via "Run workflow" in the Actions UI
+#
+# Until APP_RUNNER_SERVICE_ARN is set, the job exits successfully after printing
+# the launch checklist (no AWS mutate calls).
+name: Deploy runtime (manual, inactive)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO: macroiq
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Launch checklist (no live deploy yet)
+        if: ${{ vars.APP_RUNNER_SERVICE_ARN == '' }}
+        run: |
+          echo "APP_RUNNER_SERVICE_ARN is not set — skipping live deploy (by design)."
+          echo ""
+          echo "When ready to go live:"
+          echo "  1. Create App Runner service from ECR ${{ env.ECR_REPO }}:deployment"
+          echo "  2. Inject PG_* / optional API keys into the service env"
+          echo "  3. Keep AUTH_ENABLED=0 until Cognito JWT verify is wired"
+          echo "  4. Set repo variable APP_RUNNER_SERVICE_ARN, then re-run this workflow"
+          echo ""
+          echo "This workflow never runs on git push, so it will not incur deploy costs accidentally."
+
+      - name: Configure AWS credentials
+        if: ${{ vars.APP_RUNNER_SERVICE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Start App Runner deployment
+        if: ${{ vars.APP_RUNNER_SERVICE_ARN != '' }}
+        run: |
+          aws apprunner start-deployment \
+            --service-arn "${{ vars.APP_RUNNER_SERVICE_ARN }}" \
+            --region "${{ env.AWS_REGION }}"
+          echo "Triggered deployment for ${{ vars.APP_RUNNER_SERVICE_ARN }}"

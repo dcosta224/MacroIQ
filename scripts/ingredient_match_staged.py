@@ -109,6 +109,70 @@ def tokenize(text: Any, *, drop_stop: bool = True) -> set[str]:
     return out
 
 
+def signal_tokens(text: Any) -> frozenset[str]:
+    """Content tokens for candidate dedup (stopwords / conjunctions excluded).
+
+    Unlike ``tokenize()``, keeps words like ``piece`` that matter in product names
+    (e.g. ``stems and pieces`` vs ``stems`` alone).
+    """
+    raw = normalize_text(text).split()
+    out: set[str] = set()
+    for tok in raw:
+        if tok in STOPWORDS:
+            continue
+        if len(tok) <= 1 and not tok.isdigit():
+            continue
+        out.add(simple_lemma(tok))
+    return frozenset(out)
+
+
+def dedupe_candidate_rows(
+    rows: list[dict[str, Any]],
+    *,
+    description_key: str = "description",
+    score_key: str = "retrieval_score",
+    preserve_fdc_ids: set[int] | None = None,
+) -> list[dict[str, Any]]:
+    """Keep one candidate per identical signal-token set (highest score wins).
+
+    Candidates like ``MUSHROOMS STEMS & PIECES`` vs ``MUSHROOMS STEMS AND PIECES``
+    collapse to a single row; ``red wine`` vs ``white wine`` stay distinct.
+    """
+    if len(rows) <= 1:
+        return rows
+
+    preserve = preserve_fdc_ids or set()
+    ranked = sorted(
+        rows,
+        key=lambda r: (
+            -float(r.get(score_key) or 0.0),
+            -float(r.get("staged_final_score") or 0.0),
+            int(r.get("fdc_id") or 0),
+        ),
+    )
+    seen: set[frozenset[str]] = set()
+    kept: list[dict[str, Any]] = []
+    for row in ranked:
+        fid = row.get("fdc_id")
+        if fid is not None and int(fid) in preserve:
+            kept.append(row)
+            continue
+        sig = signal_tokens(str(row.get(description_key) or ""))
+        if sig in seen:
+            continue
+        seen.add(sig)
+        kept.append(row)
+
+    return sorted(
+        kept,
+        key=lambda r: (
+            -float(r.get(score_key) or 0.0),
+            -float(r.get("staged_final_score") or 0.0),
+            int(r.get("fdc_id") or 0),
+        ),
+    )
+
+
 def classify_modifier_tokens(tokens: set[str]) -> dict[str, set[str]]:
     return {
         "physical_form": tokens & PHYSICAL_FORM_TERMS,
@@ -1074,7 +1138,7 @@ def retrieve_llm_candidates(
             idx for idx, score in lex_scores.items() if score >= rc.lexical_score_floor
         )
 
-    # --- Union + always include staged top-1.
+    # --- Union + include staged top-1 when it satisfies portion-capable filter (if any).
     union: set[int] = semantic_idxs | lexical_idxs
     staged_top1_idx: int | None = None
     if staged_top1_fdc_id is not None:
@@ -1083,7 +1147,8 @@ def retrieve_llm_candidates(
                 staged_top1_idx = idx
                 break
         if staged_top1_idx is not None:
-            union.add(staged_top1_idx)
+            if allowed_fdc_ids is None or int(staged_top1_fdc_id) in allowed_fdc_ids:
+                union.add(staged_top1_idx)
 
     if not union:
         return pd.DataFrame()
@@ -1113,6 +1178,8 @@ def retrieve_llm_candidates(
             }
         )
 
+    rows = dedupe_candidate_rows(rows)
+
     df = pd.DataFrame(rows).sort_values(
         ["retrieval_score", "staged_final_score", "fdc_id"],
         ascending=[False, False, True],
@@ -1122,6 +1189,8 @@ def retrieve_llm_candidates(
     df.attrs["n_lexical_pool"] = len(lexical_idxs)
     df.attrs["n_semantic_pool"] = len(semantic_idxs)
     df.attrs["n_union"] = len(union)
+    df.attrs["n_union_before_dedup"] = len(union)
+    df.attrs["n_after_signal_dedup"] = len(rows)
     return df
 
 

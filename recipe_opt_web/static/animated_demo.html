@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MacroIQ — Animated Agent Loop</title>
+  <!-- Apply record-mode before first paint so stage-only captures never show chrome. -->
+  <script>
+    (() => {
+      try {
+        if (new URLSearchParams(location.search).has("record")) {
+          document.documentElement.classList.add("record-mode");
+        }
+      } catch (_) {}
+    })();
+  </script>
+  <style>
+    html.record-mode,
+    html.record-mode body {
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      background: #f3f6f4 !important;
+    }
+    html.record-mode .demo-header,
+    html.record-mode .nav-hint,
+    html.record-mode .stage-caption,
+    html.record-mode .eyebrow,
+    html.record-mode .lede {
+      display: none !important;
+      visibility: hidden !important;
+      height: 0 !important;
+      max-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      border: none !important;
+    }
+    html.record-mode .demo-shell {
+      max-width: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+    }
+    html.record-mode .stage-wrap,
+    html.record-mode .stage-viewport {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      border: none !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+    html.record-mode {
+      --stage-h: 100vh;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,650&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/animated_demo.css" />
+</head>
+<body>
+  <div class="demo-shell">
+    <header class="demo-header">
+      <p class="eyebrow">Watch the agent work · ~20s walkthrough</p>
+      <h1>MacroIQ</h1>
+      <p class="lede">
+        A scripted tour of the computation graph — neighborhood retrieval, drafting,
+        optimization, and a second pass that lands the macros.
+      </p>
+      <p class="nav-hint">
+        <a href="/">← Full playground</a>
+        <span class="sep">·</span>
+        <a href="/loop-demo">Static loop cards</a>
+        <span class="sep">·</span>
+        <button type="button" class="replay-btn" id="replay_btn">Replay</button>
+      </p>
+    </header>
+
+    <div class="stage-wrap">
+      <div class="stage-viewport" id="stage_viewport" aria-live="polite">
+        <div class="stage-cam" id="stage_cam">
+        <svg class="edge-layer" id="edge_layer" aria-hidden="true"></svg>
+
+        <aside class="db-node db-recipe" id="db_recipe" data-db="recipe">
+          <span class="db-tag">Database</span>
+          <strong>Recipe Embeddings</strong>
+          <p>vector store</p>
+        </aside>
+        <aside class="db-node db-ingredient" id="db_ingredient" data-db="ingredient">
+          <span class="db-tag">Database</span>
+          <strong>Ingredient Embeddings</strong>
+          <p>vector store</p>
+        </aside>
+
+        <div class="graph-rail" id="graph_rail">
+          <svg class="rail-edges" id="rail_edges" aria-hidden="true"></svg>
+
+          <!-- 0 User query -->
+          <article class="graph-step node-query" data-node="query" id="node_query">
+            <div class="node-circle" aria-hidden="false">
+              <span class="node-title">User query</span>
+            </div>
+            <div class="node-body">
+              <div class="query-box">
+                <p class="stream-target" id="query_text"></p>
+              </div>
+              <h3 class="macros-label">Nutrient targets <span class="hint">(calorie % min–max)</span></h3>
+              <div class="sliders" id="macro_sliders">
+                <div class="slider-row" data-macro="protein" data-lo="26" data-hi="30">
+                  <span class="slider-label">Protein</span>
+                  <div class="range-dual">
+                    <div class="range-track"></div>
+                    <div class="range-fill"></div>
+                    <span class="thumb thumb-lo"></span>
+                    <span class="thumb thumb-hi"></span>
+                  </div>
+                  <span class="slider-value">26–30%</span>
+                </div>
+                <div class="slider-row" data-macro="carbs" data-lo="38" data-hi="42">
+                  <span class="slider-label">Carbs</span>
+                  <div class="range-dual">
+                    <div class="range-track"></div>
+                    <div class="range-fill"></div>
+                    <span class="thumb thumb-lo"></span>
+                    <span class="thumb thumb-hi"></span>
+                  </div>
+                  <span class="slider-value">38–42%</span>
+                </div>
+                <div class="slider-row" data-macro="fat" data-lo="30" data-hi="34">
+                  <span class="slider-label">Fat</span>
+                  <div class="range-dual">
+                    <div class="range-track"></div>
+                    <div class="range-fill"></div>
+                    <span class="thumb thumb-lo"></span>
+                    <span class="thumb thumb-hi"></span>
+                  </div>
+                  <span class="slider-value">30–34%</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- 1 Neighborhood -->
+          <article class="graph-step node-space" data-node="neighborhood" id="node_neighborhood">
+            <div class="node-circle">
+              <span class="node-tag">Recipe space</span>
+              <span class="node-title">Query neighborhood</span>
+            </div>
+            <div class="node-body">
+              <ul class="stream-list" id="neighborhood_list"></ul>
+            </div>
+          </article>
+
+          <!-- 2 Draft -->
+          <article class="graph-step node-llm" data-node="draft" id="node_draft">
+            <div class="node-circle">
+              <span class="node-tag">LLM draft</span>
+              <span class="node-title">Draft candidate</span>
+            </div>
+            <div class="node-body">
+              <p class="dish-title stream-target" id="draft_title"></p>
+              <ul class="stream-list ingredients" id="draft_ings"></ul>
+            </div>
+          </article>
+
+          <!-- 3 Opt1 -->
+          <article class="graph-step node-opt" data-node="opt1" id="node_opt1">
+            <div class="node-circle">
+              <span class="node-tag">1 · Diagnose</span>
+              <span class="node-title">Optimizer</span>
+            </div>
+            <div class="node-body">
+              <canvas class="opt-canvas" id="opt1_canvas" width="420" height="180"></canvas>
+              <div class="opt-readout" id="opt1_readout">
+                <p class="opt-line"><span class="opt-k">Nutrient loss</span> <span class="opt-v" data-field="loss">—</span> <span class="check" hidden>✓</span></p>
+                <p class="opt-line"><span class="opt-k">Macros</span> <span class="opt-v" data-field="macros">—</span> <span class="check" hidden>✓</span></p>
+                <p class="opt-line status"><span class="opt-k">Diagnosis</span> <span class="opt-v" data-field="status">—</span></p>
+              </div>
+            </div>
+          </article>
+
+          <!-- 4 Propose -->
+          <article class="graph-step node-llm" data-node="propose" id="node_propose">
+            <div class="node-circle">
+              <span class="node-tag">2 · Propose</span>
+              <span class="node-title">LLM propose</span>
+            </div>
+            <div class="node-body">
+              <h3 class="subhead">Edit proposals</h3>
+              <ul class="stream-list" id="propose_edits"></ul>
+              <h3 class="subhead">Search ingredient space</h3>
+              <ul class="stream-list mono" id="propose_search"></ul>
+            </div>
+          </article>
+
+          <!-- 5 Decide + expand -->
+          <article class="graph-step node-decide" data-node="decide" id="node_decide">
+            <div class="node-circle">
+              <span class="node-tag">3 · Decide</span>
+              <span class="node-title">LLM decide</span>
+            </div>
+            <div class="node-body">
+              <div class="decide-block">
+                <p class="decide-choice stream-target" id="decide_choice"></p>
+                <p class="decide-reason stream-target" id="decide_reason"></p>
+              </div>
+              <div class="expand-block">
+                <p class="expand-label"><span class="mini-tag expand">Expand</span> Add to query neighborhood</p>
+                <ul class="stream-list" id="expand_list"></ul>
+              </div>
+            </div>
+          </article>
+
+          <!-- 6 Apply -->
+          <article class="graph-step node-apply" data-node="apply" id="node_apply">
+            <div class="node-circle">
+              <span class="node-tag">4 · Apply</span>
+              <span class="node-title">Apply edits</span>
+            </div>
+            <div class="node-body">
+              <ul class="stream-list ingredients" id="apply_ings"></ul>
+            </div>
+          </article>
+
+          <!-- 7 Opt2 -->
+          <article class="graph-step node-opt" data-node="opt2" id="node_opt2">
+            <div class="node-circle">
+              <span class="node-tag">Diagnose</span>
+              <span class="node-title">Optimizer · round 2</span>
+            </div>
+            <div class="node-body">
+              <canvas class="opt-canvas" id="opt2_canvas" width="420" height="180"></canvas>
+              <div class="opt-readout" id="opt2_readout">
+                <p class="opt-line"><span class="opt-k">Nutrient loss</span> <span class="opt-v" data-field="loss">—</span> <span class="check" hidden>✓</span></p>
+                <p class="opt-line"><span class="opt-k">Macros</span> <span class="opt-v" data-field="macros">—</span> <span class="check" hidden>✓</span></p>
+                <p class="opt-line status"><span class="opt-k">Diagnosis</span> <span class="opt-v" data-field="status">—</span></p>
+              </div>
+            </div>
+          </article>
+
+          <!-- 8 Compare -->
+          <article class="graph-step node-compare" data-node="compare" id="node_compare">
+            <div class="node-circle">
+              <span class="node-tag">Compare</span>
+              <span class="node-title">LLM compare</span>
+            </div>
+            <div class="node-body">
+              <div class="compare-grid">
+                <div class="compare-col">
+                  <h3>Original draft</h3>
+                  <p class="dish-title">Higher-Protein Carbonara</p>
+                  <ul class="ingredients static">
+                    <li>120 g pasta</li>
+                    <li>36 g egg yolk</li>
+                    <li>40 g parmesan</li>
+                    <li>50 g bacon</li>
+                  </ul>
+                </div>
+                <div class="compare-col highlight">
+                  <h3>Edited candidate</h3>
+                  <p class="dish-title">Higher-Protein Carbonara</p>
+                  <ul class="ingredients static">
+                    <li>120 g pasta</li>
+                    <li>36 g egg yolk</li>
+                    <li>40 g parmesan</li>
+                    <li>50 g bacon</li>
+                    <li class="added">100 g chicken breast</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="compare-status" id="compare_status">
+                <span class="spinner" aria-hidden="true"></span>
+                <span>Comparing with LLM…</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- 9 Result -->
+          <article class="graph-step node-result" data-node="result" id="node_result">
+            <div class="node-circle">
+              <span class="node-tag">Result</span>
+              <span class="node-title">Final recipe</span>
+            </div>
+            <div class="node-body">
+              <p class="dish-title" id="result_title">Higher-Protein Carbonara</p>
+              <ul class="stream-list ingredients" id="result_ings"></ul>
+              <div class="result-metrics" id="result_metrics">
+                <p class="result-typicality">Typical ingredient ratios for dish type</p>
+                <p class="result-macros">
+                  <span class="macro-pill"><span class="macro-name">Protein</span> <span class="macro-val">28%</span></span>
+                  <span class="macro-pill"><span class="macro-name">Carbs</span> <span class="macro-val">40%</span></span>
+                  <span class="macro-pill"><span class="macro-name">Fat</span> <span class="macro-val">32%</span></span>
+                </p>
+              </div>
+              <p class="result-explain stream-target" id="result_explain"></p>
+            </div>
+          </article>
+        </div>
+        </div>
+      </div>
+      <p class="stage-caption" id="stage_caption">Starting…</p>
+    </div>
+  </div>
+  <script src="/static/animated_demo.js"></script>
+</body>
+</html>

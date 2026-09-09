@@ -1,0 +1,19 @@
+[Unit]
+Description=Capstone Recipe Opt Agent (FastAPI + uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/opt/capstone
+Environment=PATH=/home/ec2-user/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONPATH=/opt/capstone/scripts:/opt/capstone
+Environment=RECIPE_DATA_SOURCE=db
+EnvironmentFile=-/opt/capstone/.env
+ExecStart=/home/ec2-user/.local/bin/uv run uvicorn recipe_opt_web.server:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -11,10 +11,13 @@ from typing import Any
 from portion_gram import (
     CONTAINER_UNIT_TOKENS,
     PORTION_INDEX_SQL,
+    _extract_volume_unit_from_text,
     classify_food_portion_row,
     normalize_count_portion_row,
     normalize_portion_row,
 )
+from unit_convert import UnitConversionError, normalize_volume_unit
+from usda_volume_units import text_has_volume
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CACHE = ROOT / "scratch" / "portion_summaries_by_fdc.json"
@@ -106,6 +109,39 @@ def format_portion_summary_compact(lines: list[PortionSummaryLine], *, max_lines
     return "; ".join(line.display_token() for line in lines[:max_lines])
 
 
+def _volume_units_from_text(*parts: str) -> set[str]:
+    units: set[str] = set()
+    for part in parts:
+        if not part:
+            continue
+        try:
+            units.add(normalize_volume_unit(part))
+        except UnitConversionError:
+            pass
+        if text_has_volume(part):
+            unit = _extract_volume_unit_from_text(part)
+            if unit:
+                units.add(unit)
+    return units
+
+
+def _volume_query_units(query_tokens: list[str]) -> set[str]:
+    return _volume_units_from_text(*query_tokens)
+
+
+def _line_volume_units(line: PortionSummaryLine) -> set[str]:
+    parts = (line.modifier, line.measure_unit, line.portion_description)
+    if line.rules_class != "volume" and not text_has_volume(*parts):
+        return set()
+    return _volume_units_from_text(*parts)
+
+
+def _line_is_volume(line: PortionSummaryLine) -> bool:
+    return line.rules_class == "volume" or text_has_volume(
+        line.modifier, line.measure_unit, line.portion_description
+    )
+
+
 def portion_match_score(
     lines: list[PortionSummaryLine],
     query_tokens: list[str],
@@ -140,8 +176,13 @@ def portion_match_score(
                 score += 0.5
             elif t in text:
                 score += 0.25
-        if amount_kind == "volume" and line.rules_class == "volume":
-            score += 0.1
+        if amount_kind == "volume":
+            query_vol = _volume_query_units(query_tokens)
+            line_vol = _line_volume_units(line)
+            if query_vol and line_vol:
+                score = max(score, 0.45)
+            if _line_is_volume(line):
+                score += 0.1
         if amount_kind == "count" and line.rules_class == "count":
             score += 0.1
         best = max(best, min(score, 1.0))

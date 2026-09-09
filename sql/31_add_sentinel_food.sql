@@ -21,7 +21,7 @@ INSERT INTO usda.food (fdc_id, data_type, description, food_category_id, publica
 VALUES (
     999000001,
     'sentinel',
-    'NON-CALORIC OR NEGLIGIBLE INGREDIENT (water, ice, plain salt, garnish)',
+    'NON-CALORIC OR NEGLIGIBLE INGREDIENT (ice, plain salt, garnish)',
     NULL,
     NULL
 )

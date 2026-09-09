@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MacroIQ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Sora:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/macroiq.css" />
+</head>
+<body>
+  <div class="page" id="page">
+    <header class="brand-bar">
+      <div class="brand-lockup">
+        <p class="brand">MacroIQ</p>
+        <p class="tagline">Pick a dish. Tune calories and macros. Watch the recipe take shape.</p>
+      </div>
+      <nav class="brand-nav" aria-label="Secondary">
+        <a href="/playground">Playground</a>
+      </nav>
+    </header>
+
+    <div class="workspace" id="workspace">
+      <aside class="compose" aria-label="Compose request">
+        <form id="compose-form" novalidate>
+          <section class="block menu-block">
+            <div class="block-head">
+              <h2>Recipe Family</h2>
+              <span class="hint" id="menu-count">—</span>
+            </div>
+            <p class="hint">Required — start from a real recipe in that dish family.</p>
+            <label class="field">
+              <span class="sr-only">Search recipe families</span>
+              <input
+                type="search"
+                id="menu-search"
+                placeholder="Search indexed recipe families…"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </label>
+            <ul id="dish-menu" class="dish-menu" role="listbox" aria-label="Indexed recipe families"></ul>
+            <p class="hint" id="menu-selected">No recipe family selected.</p>
+          </section>
+
+          <section class="block">
+            <h2>Describe what you'd like <span class="optional">(optional)</span></h2>
+            <label class="field">
+              <span class="sr-only">Describe what you'd like</span>
+              <textarea
+                id="semantic"
+                rows="3"
+                placeholder="High-protein, no pork, weekday-friendly…"
+              ></textarea>
+            </label>
+            <label class="field kcal-field">
+              <span class="field-label">Calories <span class="optional">(optional)</span></span>
+              <input
+                type="number"
+                id="kcal_target"
+                min="100"
+                max="8000"
+                step="10"
+                placeholder="e.g. 650"
+                inputmode="numeric"
+              />
+            </label>
+          </section>
+
+          <section class="block" id="macro-block">
+            <div class="block-head">
+              <h2>Macro ranges <span class="optional">optional</span></h2>
+              <div class="macro-head-actions">
+                <button type="button" class="text-btn hidden" id="macro-clear" title="Ignore macro targets">
+                  Clear
+                </button>
+                <div class="macro-suggest-wrap">
+                  <button type="button" class="text-btn" id="macro-suggest" disabled title="Needs a selected recipe family">
+                    Pick for me
+                  </button>
+                  <span class="hint macro-suggest-aside">(based on recipe family)</span>
+                </div>
+              </div>
+            </div>
+            <p class="hint" id="macro-hint">
+              Optional. Leave unset to optimize for dish proportions only. Drag a range or use Pick for me to target macros.
+            </p>
+            <div class="macro-grid macro-inactive" id="macro-grid">
+              <div class="macro-col" data-macro="protein">
+                <div class="macro-head"><span>Protein</span><strong id="protein_readout">—</strong></div>
+                <div class="dual-range" data-macro="protein">
+                  <div class="range-track"><div class="range-fill" id="protein_fill"></div></div>
+                  <input type="range" id="protein_min" min="0" max="100" step="1" value="19" aria-label="Protein min" />
+                  <input type="range" id="protein_max" min="0" max="100" step="1" value="23" aria-label="Protein max" />
+                </div>
+              </div>
+              <div class="macro-col" data-macro="carb">
+                <div class="macro-head"><span>Carbs</span><strong id="carb_readout">—</strong></div>
+                <div class="dual-range" data-macro="carb">
+                  <div class="range-track"><div class="range-fill" id="carb_fill"></div></div>
+                  <input type="range" id="carb_min" min="0" max="100" step="1" value="35" aria-label="Carbs min" />
+                  <input type="range" id="carb_max" min="0" max="100" step="1" value="55" aria-label="Carbs max" />
+                </div>
+              </div>
+              <div class="macro-col" data-macro="fat">
+                <div class="macro-head"><span>Fat</span><strong id="fat_readout">—</strong></div>
+                <div class="dual-range" data-macro="fat">
+                  <div class="range-track"><div class="range-fill" id="fat_fill"></div></div>
+                  <input type="range" id="fat_min" min="0" max="100" step="1" value="25" aria-label="Fat min" />
+                  <input type="range" id="fat_max" min="0" max="100" step="1" value="45" aria-label="Fat max" />
+                </div>
+              </div>
+            </div>
+            <p class="hint macro-typicality hidden" id="macro-typicality" aria-live="polite"></p>
+            <p class="hint warn hidden" id="macro-warn" aria-live="polite"></p>
+          </section>
+
+          <div class="compose-actions">
+            <button type="submit" id="run-btn">Optimize recipe</button>
+            <p class="hint" id="run-status" aria-live="polite"></p>
+          </div>
+        </form>
+      </aside>
+
+      <main class="stage" id="stage" aria-label="Pipeline stage">
+        <div class="stage-idle" id="stage-idle">
+          <p class="stage-kicker">Live pipeline</p>
+          <h1>Your recipe will take shape here.</h1>
+          <p class="stage-lede">
+            Choose a recipe family, optionally add an ask, calorie target, or macro ranges,
+            then watch each step of the optimization unfold.
+          </p>
+        </div>
+
+        <div class="stage-live hidden" id="stage-live">
+          <header class="progress-hero">
+            <div class="pulse" id="pulse" aria-hidden="true"></div>
+            <div class="progress-copy">
+              <p class="stage-kicker" id="phase-kicker">Working</p>
+              <h2 id="phase-title">Starting…</h2>
+              <p id="phase-detail" class="phase-detail">Connecting to the agent.</p>
+              <p class="progress-remaining hint" id="progress-remaining" aria-live="polite"></p>
+            </div>
+          </header>
+
+          <section class="feed-block">
+            <div class="block-head">
+              <h3>Progress</h3>
+              <span class="hint" id="feed-count">0 steps</span>
+            </div>
+            <ol id="activity-feed" class="activity-feed" aria-live="polite"></ol>
+          </section>
+
+          <section class="result-block hidden" id="result-block">
+            <div class="block-head">
+              <h3>Result</h3>
+              <div class="result-head-actions">
+                <button type="button" class="text-btn hidden" id="revert-amounts">Revert amounts</button>
+                <span class="hint" id="result-status">—</span>
+              </div>
+            </div>
+            <div class="candidate-pager hidden" id="candidate-pager" aria-label="Other candidates">
+              <button type="button" class="pager-btn" id="candidate-prev" aria-label="Previous candidate">‹</button>
+              <div class="pager-meta">
+                <span class="pager-title" id="candidate-pager-title">Recommended</span>
+                <span class="pager-count hint" id="candidate-pager-count"></span>
+              </div>
+              <button type="button" class="pager-btn" id="candidate-next" aria-label="Next candidate">›</button>
+            </div>
+            <details class="judge-rationale hidden" id="judge-rationale">
+              <summary>Unusual ingredients</summary>
+              <p id="judge-rationale-body"></p>
+            </details>
+            <div class="result-macros" id="result-macros" aria-label="Final macros"></div>
+            <div class="macro-tip hidden" id="macro-tip" role="dialog" aria-live="polite"></div>
+            <p class="result-verdict" id="result-verdict"></p>
+            <div class="result-ings" id="result-ings"></div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="/static/macroiq.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# Patterns passed to `aws s3 sync --exclude` (one per line; # comments ignored).
+__pycache__/*
+*.pyc
+.DS_Store
+.env
+.venv/*
+.git/*

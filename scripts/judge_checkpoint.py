@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -60,3 +62,39 @@ def no_portion_rate(df: pd.DataFrame) -> tuple[int, int, float]:
     total = len(df)
     nop = int((df["grams_status"] == "no_portion").sum())
     return nop, total, nop / max(total, 1)
+
+
+def _json_default(obj: Any) -> Any:
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
+def append_judge_jsonl(path: Path, row: dict[str, Any]) -> None:
+    """Append one judge row as a JSON line."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, default=_json_default) + "\n")
+
+
+def _read_judge_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line:
+            rows.append(json.loads(line))
+    return rows
+
+
+def compact_jsonl_to_parquet(jsonl_path: Path, parquet_path: Path) -> int:
+    """Merge all JSONL rows into parquet by (recipe_id, ingredient_idx); last row wins."""
+    rows = _read_judge_jsonl(jsonl_path)
+    if not rows:
+        return len(load_judge_checkpoint(parquet_path))
+    by_key: dict[tuple[int, int], dict[str, Any]] = {}
+    for row in rows:
+        key = (int(row["recipe_id"]), int(row["ingredient_idx"]))
+        by_key[key] = row
+    return merge_judge_checkpoint(parquet_path, list(by_key.values()))

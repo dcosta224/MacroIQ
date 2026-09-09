@@ -1,0 +1,52 @@
+# Python / tooling
+.venv/
+__pycache__/
+*.pyc
+.pip_packages/
+.cursor/
+
+# Git / IDE
+.git/
+.gitignore
+.DS_Store
+
+# Secrets
+.env
+deploy/aws.env
+
+# Data and generated artifacts
+Data/
+scratch/
+notebooks/
+tests/
+sql/
+infra/
+docs/
+deploy/
+mlruns/
+mlartifacts/
+mlflow.db
+mvp_web/cache/
+mvp_agent/
+mvp_web/
+
+# Keep MacroIQ SQL schemas available to the image (Dockerfile COPY).
+sql/
+!sql/
+!sql/42_create_canonical_neighborhood_cache.sql
+!sql/43_create_macroiq_runs.sql
+
+# Allow the dequant FDC grounding cache into the build context (gitignore uses Data/).
+!data/
+!data/dequant_norm_llm_cache.json
+
+*.csv
+*.txt
+*.png
+*.npy
+*.parquet
+*.pkl
+*.ipynb
+
+# Installers
+AWSCLIV2.pkg

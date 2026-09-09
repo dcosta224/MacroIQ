@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MacroIQ — Agent Loop Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,650&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/loop_demo.css" />
+</head>
+<body>
+  <div class="demo-shell">
+    <header class="demo-header">
+      <p class="eyebrow">Online agent loop · presentation demo</p>
+      <h1>MacroIQ</h1>
+      <p class="lede">
+        Same request and macro box enter the loop. Outputs below are editable for talk-track
+        rehearsals — they look like live readouts.
+      </p>
+      <p class="nav-hint">
+        <a href="/">← Full playground</a>
+        ·
+        <a href="/animated-demo">Watch animated walkthrough</a>
+      </p>
+    </header>
+
+    <section class="inputs panel">
+      <h2>User query</h2>
+      <label class="sr-only" for="user_query">Text query</label>
+      <textarea
+        id="user_query"
+        rows="3"
+        spellcheck="true"
+      >Higher-protein carbonara: about 28% protein, 40% carbs, 32% fat. Keep pasta, egg, and hard cheese — lighter, not cream-sauce-like.</textarea>
+
+      <h2 class="macros-heading">Nutrient targets <span class="hint">(calorie % min–max)</span></h2>
+      <div class="sliders">
+        <div class="slider-row" data-macro="protein" data-min="10" data-max="50" data-lo="26" data-hi="30">
+          <span class="slider-label">Protein</span>
+          <div class="range-dual" tabindex="0">
+            <div class="range-track" aria-hidden="true"></div>
+            <div class="range-fill" aria-hidden="true"></div>
+            <button type="button" class="thumb thumb-lo" aria-label="Protein min"></button>
+            <button type="button" class="thumb thumb-hi" aria-label="Protein max"></button>
+          </div>
+          <span class="slider-value" data-val>26–30%</span>
+        </div>
+        <div class="slider-row" data-macro="carbs" data-min="10" data-max="60" data-lo="38" data-hi="42">
+          <span class="slider-label">Carbs</span>
+          <div class="range-dual" tabindex="0">
+            <div class="range-track" aria-hidden="true"></div>
+            <div class="range-fill" aria-hidden="true"></div>
+            <button type="button" class="thumb thumb-lo" aria-label="Carbs min"></button>
+            <button type="button" class="thumb thumb-hi" aria-label="Carbs max"></button>
+          </div>
+          <span class="slider-value" data-val>38–42%</span>
+        </div>
+        <div class="slider-row" data-macro="fat" data-min="10" data-max="50" data-lo="30" data-hi="34">
+          <span class="slider-label">Fat</span>
+          <div class="range-dual" tabindex="0">
+            <div class="range-track" aria-hidden="true"></div>
+            <div class="range-fill" aria-hidden="true"></div>
+            <button type="button" class="thumb thumb-lo" aria-label="Fat min"></button>
+            <button type="button" class="thumb thumb-hi" aria-label="Fat max"></button>
+          </div>
+          <span class="slider-value" data-val>30–34%</span>
+        </div>
+      </div>
+      <p class="box-line" id="box_line">Target box: protein 26–30% · carbs 38–42% · fat 30–34%</p>
+    </section>
+
+    <section class="pipeline">
+      <article class="step step-space">
+        <div class="step-meta">
+          <span class="step-tag space">Recipe space</span>
+          <h3>Query neighborhood</h3>
+        </div>
+        <div
+          class="ghost"
+          contenteditable="true"
+          spellcheck="false"
+          data-step="neighborhood"
+        >Matched canonical dish: BBQ Ribs (id 35)
+Neighborhood: 40 RecipeNLG variants (Jaccard FoodOn)
+Seed recipe: Mock “Kansas City” Style Smoked Spare Ribs
+Starting roles: pork rib · BBQ sauce · rub / spice</div>
+      </article>
+
+      <article class="step step-llm">
+        <div class="step-meta">
+          <span class="step-tag llm">LLM draft</span>
+          <h3>Draft candidate</h3>
+        </div>
+        <div
+          class="ghost"
+          contenteditable="true"
+          spellcheck="false"
+          data-step="draft"
+        >Title: Higher-Protein Carbonara
+120 g pasta
+36 g egg yolk
+40 g parmesan
+50 g bacon
+Notes: classic four-ingredient plate; yolks + cheese for emulsion, bacon for cured-pork identity</div>
+      </article>
+
+      <article class="step step-opt">
+        <div class="step-meta">
+          <span class="step-tag opt">1 · Diagnose</span>
+          <h3>Optimizer</h3>
+        </div>
+        <div
+          class="ghost"
+          contenteditable="true"
+          spellcheck="false"
+          data-step="diagnose"
+        >Grounded: beef chuck short ribs (200 g) + Bull’s-Eye BBQ (80 g)
+PFC after LP: 29.5% P / 18.0% C / 52.4% F
+Nutrient slack L1: 0.41 · Ratio (share W₁): 0.17
+Diagnosis: OUTSIDE_HULL · band: must_retry
+Binding: protein_min, carb_min, fat_max</div>
+      </article>
+
+      <div class="loop-row">
+        <article class="step step-llm">
+          <div class="step-meta">
+            <span class="step-tag llm">2 · Propose</span>
+            <h3>LLM propose</h3>
+          </div>
+          <div
+            class="ghost"
+            contenteditable="true"
+            spellcheck="false"
+            data-step="propose"
+          >Ideas: leaner beef cut swap · add grilled chicken breast (OOD) · lentil side
+Queries: “bbq ribs with lean beef cuts”, “poultry bbq with beef ribs”
+Shell hits: barbacoa chuck roast, beef bourguignon, red beans casserole</div>
+        </article>
+
+        <article class="step step-llm">
+          <div class="step-meta">
+            <span class="step-tag llm">3 · Decide</span>
+            <h3>LLM decide</h3>
+          </div>
+          <div
+            class="ghost"
+            contenteditable="true"
+            spellcheck="false"
+            data-step="decide"
+          >Action: apply_bundle ood_protein::b0
+Rationale: add lean chicken accent to open hull ∩ box while keeping no-pork BBQ identity
+Identity: preserves_dish=true · roles retained: rib, sauce</div>
+        </article>
+
+        <article class="step step-apply">
+          <div class="step-meta">
+            <span class="step-tag apply">4 · Apply</span>
+            <h3>Apply edits</h3>
+          </div>
+          <div
+            class="ghost"
+            contenteditable="true"
+            spellcheck="false"
+            data-step="apply"
+          >Tried add: chicken breast → apply stub_no_macro_data (no M column)
+Recipe unchanged: short ribs + BBQ sauce
+Pool still holds draft-grounded plate for finalize</div>
+        </article>
+      </div>
+
+      <article class="step step-expand">
+        <div class="step-meta">
+          <span class="step-tag expand">Expand</span>
+          <h3>Add to Query Neighborhood</h3>
+        </div>
+        <div
+          class="ghost"
+          contenteditable="true"
+          spellcheck="false"
+          data-step="expand"
+        >Ingredient space: OOD lean breast catalog + neighborhood FDC lines
+Co-occurrence (chicken | ribs+sauce core) ≈ 0.025 — rare staple, not retrieve hit
+Geometry proxy: +2.0 (would newly open hull∩box) · nutrient-direction ≈ +0.15</div>
+      </article>
+
+      <article class="step step-llm">
+        <div class="step-meta">
+          <span class="step-tag llm">Compare</span>
+          <h3>LLM candidate compare</h3>
+        </div>
+        <div
+          class="ghost"
+          contenteditable="true"
+          spellcheck="false"
+          data-step="compare"
+        >Pool finalists: (A) beef short ribs + BBQ · (B) draft with sides pre-ground
+Selected: A — still a cookable no-pork rib plate after grounding
+vs GPT-5.5 resolved: oil + spice powders only (turkey/ribs failed FDC)</div>
+      </article>
+
+      <article class="step step-done">
+        <div class="step-meta">
+          <span class="step-tag done">Done</span>
+          <h3>Final recipe</h3>
+        </div>
+        <div
+          class="ghost"
+          contenteditable="true"
+          spellcheck="false"
+          data-step="done"
+        >Beef, chuck, short ribs, braised — 200 g
+Sauce, barbecue, BULL’S-EYE, original — 80 g
+Dietary: no pork ✓ · Identity dim: agent · Holistic judge (gpt-5.5): 2/10
+Structured win vs GPT-5.5: 3/4 dims (macro, ratio, identity)</div>
+      </article>
+    </section>
+  </div>
+  <script src="/static/loop_demo.js"></script>
+</body>
+</html>

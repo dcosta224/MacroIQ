@@ -1,0 +1,254 @@
+{
+  "Alcoholic beverage, wine, table, white": {
+    "id": "FOODON_03310273",
+    "label": "white wine",
+    "score": 1.0,
+    "has_children": true
+  },
+  "BACON": {
+    "id": "FOODON_03301955",
+    "label": "bacon (raw)",
+    "score": 1.0,
+    "has_children": false
+  },
+  "BARILLA, SPAGHETTI": {
+    "id": "FOODON_03412062",
+    "label": "naranjilla plant",
+    "score": 0.606,
+    "has_children": false
+  },
+  "BUTTER": {
+    "id": "FOODON_03310351",
+    "label": "butter",
+    "score": 1.0,
+    "has_children": true
+  },
+  "Bacon, pre-sliced, reduced/low sodium, unprepared": {
+    "id": "FOODON_03301955",
+    "label": "bacon (raw)",
+    "score": 1.0,
+    "has_children": false
+  },
+  "CANADIAN BACON": {
+    "id": "FOODON_00003149",
+    "label": "Canadian bacon",
+    "score": 1.0,
+    "has_children": false
+  },
+  "Cheese, fontina": {
+    "id": "FOODON_03310415",
+    "label": "fontina cheese",
+    "score": 1.0,
+    "has_children": false
+  },
+  "Cheese, parmesan, grated": {
+    "id": "FOODON_03302978",
+    "label": "parmesan cheese (grated)",
+    "score": 1.0,
+    "has_children": false
+  },
+  "Cream, fluid, half and half": {
+    "id": "FOODON_03306778",
+    "label": "cream pie",
+    "score": 0.964,
+    "has_children": true
+  },
+  "Cream, fluid, heavy whipping": {
+    "id": "FOODON_03310795",
+    "label": "heavy cream",
+    "score": 1.0,
+    "has_children": false
+  },
+  "Cream, fluid, light (coffee cream or table cream)": {
+    "id": "FOODON_03301486",
+    "label": "light cream",
+    "score": 1.0,
+    "has_children": false
+  },
+  "Egg substitute, liquid or frozen, fat free": {
+    "id": "FOODON_03316423",
+    "label": "egg substitute based on milk protein",
+    "score": 0.605,
+    "has_children": false
+  },
+  "Egg, white, raw, fresh": {
+    "id": "FOODON_02020155",
+    "label": "chicken egg white",
+    "score": 1.0,
+    "has_children": true
+  },
+  "Egg, whole, raw, fresh": {
+    "id": "FOODON_02020152",
+    "label": "chicken egg (raw)",
+    "score": 1.0,
+    "has_children": true
+  },
+  "Egg, yolk, raw, fresh": {
+    "id": "UBERON_0007378",
+    "label": "egg yolk",
+    "score": 1.0,
+    "has_children": false
+  },
+  "Garlic, raw": {
+    "id": "FOODON_00003583",
+    "label": "garlic clove",
+    "score": 1.0,
+    "has_children": false
+  },
+  "ITALIAN PECORINO ROMANO GRATED CHEESE, ITALIAN PECORINO ROMANO": {
+    "id": "FOODON_03304893",
+    "label": "romano cheese (grated)",
+    "score": 1.0,
+    "has_children": false
+  },
+  "Lemons, raw, without peel": {
+    "id": "FOODON_03301441",
+    "label": "lemon (raw)",
+    "score": 1.0,
+    "has_children": false
+  },
+  "Limeade, frozen concentrate, prepared with water": {
+    "id": "FOODON_03305428",
+    "label": "lemon juice",
+    "score": 1.0,
+    "has_children": true
+  },
+  "Milk, evaporated, 2% fat, with added vitamin A and vitamin D": {
+    "id": "FOODON_00005476",
+    "label": "cow milk (reduced fat, without added Vitamin A and Vitamin D)",
+    "score": 0.797,
+    "has_children": false
+  },
+  "Milk, whole, 3.25% milkfat, without added vitamin A and vitamin D": {
+    "id": "FOODON_00005481",
+    "label": "cow whole milk 3.5% fat (without added Vitamin A and Vitamin D)",
+    "score": 0.832,
+    "has_children": false
+  },
+  "Oil, coconut": {
+    "id": "FOODON_03302806",
+    "label": "milk chocolate",
+    "score": 0.64,
+    "has_children": false
+  },
+  "Oil, olive, salad or cooking": {
+    "id": "FOODON_03301826",
+    "label": "olive oil",
+    "score": 1.0,
+    "has_children": true
+  },
+  "Onions, raw": {
+    "id": "FOODON_03316347",
+    "label": "onion",
+    "score": 1.0,
+    "has_children": true
+  },
+  "PANCETTA DRY CURED PORK BELLY, PANCETTA": {
+    "id": "FOODON_00003249",
+    "label": "pancetta",
+    "score": 1.0,
+    "has_children": false
+  },
+  "PARMIGIANO REGGIANO": {
+    "id": "FOODON_03000473",
+    "label": "romano cheese",
+    "score": 1.0,
+    "has_children": false
+  },
+  "PART SKIM RICOTTA CHEESE": {
+    "id": "FOODON_03301739",
+    "label": "semisoft part skim cheese",
+    "score": 0.653,
+    "has_children": false
+  },
+  "Parsley, fresh": {
+    "id": "FOODON_03301205",
+    "label": "parsley leaf (raw)",
+    "score": 1.0,
+    "has_children": false
+  },
+  "Pork, cured, bacon, cooked, microwaved": {
+    "id": "FOODON_03301955",
+    "label": "bacon (raw)",
+    "score": 1.0,
+    "has_children": false
+  },
+  "Pork, cured, bacon, unprepared": {
+    "id": "FOODON_03301955",
+    "label": "bacon (raw)",
+    "score": 1.0,
+    "has_children": false
+  },
+  "SPAGHETTI": {
+    "id": "FOODON_03316826",
+    "label": "spaghetti (egg)",
+    "score": 0.968,
+    "has_children": false
+  },
+  "Salad dressing, mayonnaise, regular": {
+    "id": "FOODON_03400859",
+    "label": "dressing, mayonnaise (eurofir)",
+    "score": 0.698,
+    "has_children": false
+  },
+  "Salt, table": {
+    "id": "FOODON_03309954",
+    "label": "table salt",
+    "score": 1.0,
+    "has_children": true
+  },
+  "Spices, pepper, black": {
+    "id": "FOODON_03310917",
+    "label": "black peppercorn",
+    "score": 0.98,
+    "has_children": false
+  },
+  "Spices, pepper, red or cayenne": {
+    "id": "FOODON_03306737",
+    "label": "red cayenne pepper paste",
+    "score": 0.8,
+    "has_children": false
+  },
+  "Spices, pepper, white": {
+    "id": "FOODON_00003762",
+    "label": "white peppercorn",
+    "score": 0.98,
+    "has_children": true
+  },
+  "Spices, saffron": {
+    "id": "FOODON_03301548",
+    "label": "spice (ground)",
+    "score": 0.643,
+    "has_children": false
+  },
+  "Spices, turmeric, ground": {
+    "id": "FOODON_03310841",
+    "label": "turmeric (ground)",
+    "score": 0.769,
+    "has_children": false
+  },
+  "Squash, summer, zucchini, includes skin, raw": {
+    "id": "FOODON_03310943",
+    "label": "zucchini squash",
+    "score": 1.0,
+    "has_children": true
+  },
+  "Syrups, table blends, pancake": {
+    "id": "FOODON_03304068",
+    "label": "table blend syrup",
+    "score": 0.591,
+    "has_children": false
+  },
+  "THICK BACON": {
+    "id": "FOODON_00003150",
+    "label": "back bacon",
+    "score": 0.762,
+    "has_children": false
+  },
+  "Tomatoes, canned, red, ripe, diced": {
+    "id": "FOODON_03301458",
+    "label": "tomato (canned with tomato juice)",
+    "score": 0.603,
+    "has_children": false
+  }
+}

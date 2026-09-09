@@ -139,8 +139,28 @@ def fetch_resolved_ingredients(cur, recipe_id: int) -> pd.DataFrame:
 
 
 def fetch_food_nutrients_for_recipe(cur, fdc_ids: list[int]) -> pd.DataFrame:
+    """Fetch macro nutrients; prefers local store when RECIPE_DATA_SOURCE=local.
+
+    ``cur`` may be None when using the local store.
+    """
+    try:
+        from recipe_data_access import data_source, get_store
+
+        if data_source() == "local":
+            return get_store().food_nutrients(list(map(int, fdc_ids or [])))
+    except Exception:
+        pass
     if not fdc_ids:
         return pd.DataFrame(columns=["fdc_id", "nutrient_id", "amount"])
+    if cur is None:
+        from db import connect
+
+        conn = connect()
+        try:
+            with conn.cursor() as c:
+                return fetch_food_nutrients_for_recipe(c, fdc_ids)
+        finally:
+            conn.close()
     cur.execute(
         """
         SELECT fdc_id, nutrient_id, amount

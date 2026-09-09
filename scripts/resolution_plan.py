@@ -11,6 +11,8 @@ from amount_kind import (
     COUNT_UNITS,
     classify_amount_kind,
     infer_count_query,
+    is_micro_volume_unit,
+    missing_quantity,
     normalize_count_unit,
 )
 from recipe_parse_rules import normalize_unit
@@ -28,6 +30,8 @@ ResolutionPath = Literal[
 PlanFlag = Literal[
     "unresolvable_serving_only",
     "vague_amount",
+    "micro_amount",
+    "no_quantity_specified",
     "ambiguous_quantity_accepted",
     "compound_ingredient",
     "negligible_calorie_compound",
@@ -150,6 +154,8 @@ def needs_line_enrichment(
     parse_fields: dict[str, Any],
     plan: "ResolutionPlan",
 ) -> bool:
+    if "micro_amount" in plan.flags:
+        return False
     if plan.flags:
         return any(
             f in plan.flags
@@ -202,9 +208,15 @@ class ResolutionPlan:
         if self.flags:
             if "compound_ingredient" in self.flags:
                 return "unmeasurable"
+            if "no_quantity_specified" in self.flags:
+                return "unmeasurable"
             if "vague_amount" in self.flags:
                 return "unknown"
         return "unknown"
+
+    @property
+    def quantity_specified(self) -> bool:
+        return not missing_quantity(self.quantity)
 
     def count_query_tokens(self) -> list[str]:
         unit_tokens = _as_str_list(self.count_unit_tokens)
@@ -265,14 +277,21 @@ def build_resolution_plan(
         plan.embedded_mass_unit = paren_unit
         plan.authoritative_source = "rules_paren"
 
-    if VAGUE_QUANT_RE.search(line):
-        plan.flags.append("vague_amount")
+    if missing_quantity(qty):
+        if VAGUE_QUANT_RE.search(line):
+            plan.flags.append("vague_amount")
+        elif "no_quantity_specified" not in plan.flags:
+            plan.flags.append("no_quantity_specified")
 
     if COMPOUND_RE.search(line) and " and " in line.lower():
         plan.flags.append("compound_ingredient")
 
     if AMBIGUOUS_CONTAINER_RE.search(line):
         plan.flags.append("ambiguous_quantity_accepted")
+
+    if is_micro_volume_unit(str(unit) if unit is not None else None):
+        if "micro_amount" not in plan.flags:
+            plan.flags.append("micro_amount")
 
     amount_kind = classify_amount_kind(
         qty,

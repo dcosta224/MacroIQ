@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 
 SENTINEL_FDC_ID = 999_000_001
+WATER_SENTINEL_FDC_ID = 999_000_002
 PORTION_ID_RE = re.compile(r"portion#(\d+)", re.IGNORECASE)
 
 DEFAULT_V4_DIR = (

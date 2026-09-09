@@ -7,97 +7,7 @@ from fractions import Fraction
 from typing import Any
 
 from parse_recipe_ingredient import PARSE_FIELDS
-
-UNIT_ALIASES = {
-    # volume
-    "cup": "cup",
-    "cups": "cup",
-    "c": "cup",
-    "c.": "cup",
-    "tablespoon": "tablespoon",
-    "tablespoons": "tablespoon",
-    "tbsp": "tablespoon",
-    "tbsp.": "tablespoon",
-    "tbsps": "tablespoon",
-    "tbsps.": "tablespoon",
-    "tbs": "tablespoon",
-    "T": "tablespoon",
-    "teaspoon": "teaspoon",
-    "teaspoons": "teaspoon",
-    "tsp": "teaspoon",
-    "tsp.": "teaspoon",
-    "tsps": "teaspoon",
-    "tsps.": "teaspoon",
-    "t": "teaspoon",
-    # weight
-    "oz": "ounce",
-    "oz.": "ounce",
-    "ounce": "ounce",
-    "ounces": "ounce",
-    "lb": "pound",
-    "lb.": "pound",
-    "lbs": "pound",
-    "pound": "pound",
-    "pounds": "pound",
-    "g": "gram",
-    "gram": "gram",
-    "grams": "gram",
-    "kg": "kilogram",
-    "kilogram": "kilogram",
-    "kilograms": "kilogram",
-    # liquid
-    "ml": "milliliter",
-    "milliliter": "milliliter",
-    "milliliters": "milliliter",
-    "l": "liter",
-    "liter": "liter",
-    "liters": "liter",
-    "pint": "pint",
-    "pints": "pint",
-    "pt": "pint",
-    "quart": "quart",
-    "quarts": "quart",
-    "qt": "quart",
-    "gallon": "gallon",
-    "gallons": "gallon",
-    "gal": "gallon",
-    # count/container
-    "can": "can",
-    "cans": "can",
-    "package": "package",
-    "packages": "package",
-    "pkg": "package",
-    "box": "box",
-    "boxes": "box",
-    "jar": "jar",
-    "jars": "jar",
-    "bottle": "bottle",
-    "bottles": "bottle",
-    "stick": "stick",
-    "sticks": "stick",
-    "slice": "slice",
-    "slices": "slice",
-    "piece": "piece",
-    "pieces": "piece",
-    "clove": "clove",
-    "cloves": "clove",
-    "bunch": "bunch",
-    "bunches": "bunch",
-    "head": "head",
-    "heads": "head",
-    "stalk": "stalk",
-    "stalks": "stalk",
-    "sprig": "sprig",
-    "sprigs": "sprig",
-    "pinch": "pinch",
-    "pinches": "pinch",
-    "dash": "dash",
-    "dashes": "dash",
-    "each": "each",
-    "ea": "each",
-}
-
-ALLOWED_UNITS = sorted(set(UNIT_ALIASES.values()))
+from unit_aliases import ALLOWED_UNITS, UNIT_ALIASES, normalize_unit
 
 SIZE_WORDS = {
     "small",
@@ -159,18 +69,6 @@ def parse_quantity(qty_text: str | None) -> float | None:
         return float(Fraction(qty_text))
     except Exception:
         return None
-
-
-def normalize_unit(unit_raw: str | None) -> str | None:
-    if unit_raw is None:
-        return None
-
-    unit_clean = str(unit_raw).strip()
-    if unit_clean == "T":
-        return "tablespoon"
-
-    unit_clean = unit_clean.lower().replace(".", "")
-    return UNIT_ALIASES.get(unit_clean)
 
 
 def _map_rule_status(status: str) -> str:

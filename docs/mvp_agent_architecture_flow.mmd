@@ -1,0 +1,65 @@
+flowchart TB
+  subgraph client [Browser]
+    UI[index.html + app.js]
+  end
+
+  subgraph server [mvp_web/server.py]
+    API["POST /api/recommend"]
+    SSE[SSE stream]
+    Warmup["lifespan: corpus + MiniLM"]
+  end
+
+  subgraph runner [mvp_agent/runner.py]
+    RAP[run_agent_pipeline]
+    SA[Strands Agent]
+    FB[Deterministic fallback]
+  end
+
+  subgraph orchestrator [Amazon Bedrock]
+    BR["Nova Lite"]
+    PROMPT[5-step system prompt]
+  end
+
+  subgraph tools [mvp_agent/tools.py]
+    T1[embed_taste_query]
+    T2[rank_recipes_by_fit]
+    T3[optimize_top_candidates]
+    T4[judge_final_recipe]
+    T5[finalize_recommendation]
+  end
+
+  subgraph backends [scripts/]
+    EMB[MiniLM embed]
+    RANK[rank_recipes]
+    OPT[CVXPY optimizer]
+    JUDGE["OpenAI gpt-4o-mini"]
+    ASSY[final_payload]
+  end
+
+  subgraph data [Data]
+    CORPUS[(MVP corpus 106 recipes)]
+    DB[(Supabase mvp_log)]
+  end
+
+  UI -->|taste + macros| API
+  API --> RAP
+  RAP --> SA
+  SA --> BR
+  PROMPT --> SA
+
+  T1 --> T2 --> T3 --> T4 --> T5
+  SA --> T1
+  T1 --> EMB
+  T2 --> RANK
+  T3 --> OPT
+  T4 --> JUDGE
+  T5 --> ASSY
+
+  CORPUS --> RANK
+  CORPUS --> OPT
+  T5 --> SSE
+  SSE --> UI
+  RAP --> DB
+
+  SA -.->|incomplete| FB
+  FB --> T1

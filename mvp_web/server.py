@@ -15,12 +15,18 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from db import load_dotenv
+from mvp_agent.config import AgentConfig, bedrock_status
+from mvp_agent.runner import run_agent_pipeline
 from mvp_corpus_cache import corpus_status, warm_mvp_corpus
 from mvp_nutrient_fit import clamp_fraction_bounds
-from mvp_pipeline import PipelineEvent, UserQuery, get_embedding_model, run_pipeline
+from mvp_pipeline import PipelineEvent, UserQuery, get_embedding_model
+
+from .auth import CognitoAuthStubMiddleware
+from .launch_ready import launch_status
 
 load_dotenv()
 
@@ -34,6 +40,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Recipe MVP", version="0.1.0", lifespan=lifespan)
+app.add_middleware(CognitoAuthStubMiddleware)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -96,7 +103,16 @@ def index():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "cache": corpus_status()}
+    cfg = AgentConfig.from_env()
+    launch = launch_status()
+    return {
+        "status": "ok",
+        "agent_mode": "strands" if cfg.enabled else "legacy",
+        "bedrock_model": cfg.bedrock_model_id,
+        "bedrock": bedrock_status(),
+        "cache": corpus_status(),
+        "launch": launch,
+    }
 
 
 @app.post("/api/recommend")
@@ -118,7 +134,7 @@ def recommend(req: RecommendRequest):
 
         def run() -> None:
             try:
-                result = run_pipeline(query, on_event=on_event, log_to_db=True)
+                result = run_agent_pipeline(query, on_event=on_event, log_to_db=True)
                 q.put(_sse_event("done", {"stage": "done", "payload": result}))
             except Exception as exc:
                 q.put(_sse_event("error", {"error": str(exc)}))

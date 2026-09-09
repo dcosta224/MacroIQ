@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+import pandas as pd
+
 from parse_recipe_ingredient import is_measurable
 from recipe_parse_rules import UNIT_ALIASES, normalize_unit
 from unit_convert import UnitConversionError, unit_kind
@@ -26,14 +28,27 @@ COUNT_UNITS = frozenset(
         "head",
         "stalk",
         "sprig",
-        "pinch",
-        "dash",
         "each",
     }
 )
 
-# Vague units that are not reliably resolvable to grams.
-VAGUE_COUNT_UNITS = frozenset({"pinch", "dash", "bunch", "sprig"})
+# Tiny imprecise volume amounts (treated as volume, often negligible calories).
+MICRO_VOLUME_UNITS = frozenset({"pinch", "dash"})
+
+# Vague count units that are not reliably resolvable to grams.
+VAGUE_COUNT_UNITS = frozenset({"bunch", "sprig"})
+
+
+def missing_quantity(quantity: Any) -> bool:
+    """True when the parsed line has no numeric amount (None or NaN)."""
+    if quantity is None:
+        return True
+    try:
+        if pd.isna(quantity):
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
 
 
 def _singularize(token: str) -> str:
@@ -117,11 +132,13 @@ def classify_amount_kind(
         if not is_measurable(parse_result, ingredient_raw=ingredient_raw):
             return "unmeasurable"
 
-    if quantity is None:
+    if missing_quantity(quantity):
         return "unmeasurable"
 
     norm = _normalize_parsed_unit(unit)
     if norm:
+        if norm in MICRO_VOLUME_UNITS:
+            return "volume"
         try:
             kind = unit_kind(norm)
             return kind  # mass or volume
@@ -139,6 +156,12 @@ def classify_amount_kind(
             return "count"
 
     return "unknown"
+
+
+def is_micro_volume_unit(unit: str | None) -> bool:
+    """True for dash/pinch-style micro volume units."""
+    norm = _normalize_parsed_unit(unit)
+    return norm in MICRO_VOLUME_UNITS if norm else False
 
 
 def classify_from_parsed_row(row: dict[str, Any] | Any) -> AmountKind:

@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 from ingredient_parse_llm import DEFAULT_MODEL, MODEL_PRICING, normalize_ingredient_key
+from openai_fallback import AllKeysExhaustedError
 from resolution_plan import ResolutionPlan, build_resolution_plan, needs_line_enrichment
 
 PROMPT_VERSION = "line_enrichment_v1"
@@ -17,8 +18,9 @@ SYSTEM_PROMPT = (
     "- embedded_mass: parenthetical mass like (8 oz.)\n"
     "- explicit_mass, explicit_volume, count_portion\n"
     "- parenthetical_mass_override: parenthetical total weight overrides count\n"
-    "flags (non-exclusive): vague_amount, ambiguous_quantity_accepted, compound_ingredient, "
+    "flags (non-exclusive): vague_amount, micro_amount, ambiguous_quantity_accepted, compound_ingredient, "
     "negligible_calorie_compound\n"
+    "For dash/pinch units use explicit_volume (not count_portion).\n"
     "Set authoritative_mass_is_total=true when parenthetical mass is total weight, not per-piece.\n"
     "For compounds (parsley and chives), set is_compound=true and list components.\n"
     "certainty 0.0-1.0; rationale one short sentence."
@@ -49,6 +51,7 @@ RESPONSE_SCHEMA = {
                     "type": "string",
                     "enum": [
                         "vague_amount",
+                        "micro_amount",
                         "ambiguous_quantity_accepted",
                         "compound_ingredient",
                         "negligible_calorie_compound",
@@ -148,6 +151,8 @@ async def enrich_one_async(
             validation_error = validate_response(parsed)
             if validation_error:
                 error = validation_error
+    except AllKeysExhaustedError:
+        raise
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
 
@@ -173,6 +178,7 @@ def run_line_enrichment_sync(
     *,
     model: str = DEFAULT_MODEL,
     concurrency: int = 8,
+    progress_writer: Any = None,
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
     """Enrich lines that need LLM; items are (ingredient, parse_fields)."""
     from openai_fallback import get_async_openai_client
@@ -187,18 +193,35 @@ def run_line_enrichment_sync(
         if needs_line_enrichment(line, fields, rules_plan):
             unique[key] = (line, rules_plan)
 
+    if progress_writer is not None and unique:
+        progress_writer.add_prompt_budget(len(unique))
+
     async def _run():
         client = get_async_openai_client()
         sem = asyncio.Semaphore(concurrency)
         results: list[dict[str, Any]] = []
+        total = len(unique)
+        done = 0
 
         async def _one(key: str):
+            nonlocal done
             async with sem:
                 raw, plan = unique[key]
-                return await enrich_one_async(client, model, raw, plan)
+                row = await enrich_one_async(client, model, raw, plan)
+                done += 1
+                if progress_writer is not None:
+                    progress_writer.record_enrichment_row(
+                        done=done,
+                        total=total,
+                        ingredient_norm=key,
+                        error=row.get("error"),
+                    )
+                return row
 
-        tasks = [_one(k) for k in unique]
-        return await asyncio.gather(*tasks)
+        tasks = [asyncio.create_task(_one(k)) for k in unique]
+        for fut in asyncio.as_completed(tasks):
+            results.append(await fut)
+        return results
 
     rows = asyncio.run(_run()) if unique else []
     cache = {r["ingredient_norm"]: r for r in rows}

@@ -13,11 +13,14 @@ import numpy as np
 import pandas as pd
 
 from parse_recipe_ingredient import parse_ingredient_fields, strip_quantities_from_text
+from unit_aliases import normalize_units_in_text
 from progress_utils import iter_progress, progress_enabled_for_count, map_progress
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WORK_DIR = ROOT / "scratch" / "recipe_matching_10k"
 DEFAULT_MODEL = "all-MiniLM-L6-v2"
+# Bump when recipe dequant embedding text changes (invalidates recipe_cache dequant .npy).
+RECIPE_SEMANTIC_EMBEDDING_VERSION = "v3_unit_alias_dequant"
 
 # Recipe query artifacts
 RECIPE_PARSED = "recipe_ingredients_parsed.parquet"
@@ -74,7 +77,21 @@ def dequantified_text(row: pd.Series | dict[str, Any], *, raw: str = "") -> str:
         text = _field_text(row.get("ingredient") or row.get("description"))
     if not text:
         return ""
-    return strip_quantities_from_text(text)
+    return normalize_units_in_text(strip_quantities_from_text(text))
+
+
+def semantic_embedding_text(row: pd.Series | dict[str, Any], *, raw: str = "") -> str:
+    """Recipe text for global semantic retrieval: dequantified line plus parsed preparation."""
+    dequant = dequantified_text(row, raw=raw)
+    prep = _field_text(row.get("preparation") if isinstance(row, dict) else row.get("preparation"))
+    if not prep:
+        return dequant
+    if not dequant:
+        return prep
+    prep_low = prep.lower()
+    if prep_low in dequant.lower():
+        return dequant
+    return f"{dequant}, {prep}"
 
 
 def ensure_hf_token() -> bool:
@@ -249,7 +266,10 @@ def _embed_parsed_table(
         dequants = full_texts
     else:
         names = parsed["name"].where(parsed["name"].astype(bool), parsed[raw_col]).tolist()
-        dequants = parsed["dequantified"].tolist()
+        dequants = [
+            semantic_embedding_text(parsed.iloc[i], raw=str(parsed.iloc[i][raw_col]))
+            for i in range(len(parsed))
+        ]
 
     name_emb = _encode_texts(
         encoder, names, batch_size=batch_size, show_progress=show_progress, label=labels[0]
@@ -362,6 +382,10 @@ def build_recipe_artifacts(
         model=model,
     )
     _save_triple(_recipe_paths(work_dir), parsed, name_emb, prep_emb, dequant_emb)
+    parsed["semantic_embedding_text"] = [
+        semantic_embedding_text(parsed.iloc[i], raw=str(parsed.iloc[i]["ingredient"]))
+        for i in range(len(parsed))
+    ]
     meta_bit = {
         "n_rows": len(parsed),
         "name_shape": list(name_emb.shape),
@@ -369,6 +393,7 @@ def build_recipe_artifacts(
         "dequant_shape": list(dequant_emb.shape),
         "unprepared_prep_proxy_n": int(parsed["prep_used_unprepared"].sum()),
         "unprepared_prep_text": UNPREPARED_PREP_TEXT,
+        "semantic_embedding_version": RECIPE_SEMANTIC_EMBEDDING_VERSION,
     }
     return parsed, name_emb, prep_emb, dequant_emb, meta_bit
 
@@ -442,9 +467,19 @@ def load_or_build_recipe_artifacts(
     if not force and _triple_exists(recipe_paths) and unprepared_path.is_file():
         parsed, name_emb, prep_emb, dequant_emb = _load_triple(recipe_paths)
         meta = _read_meta(work_dir).get("recipe", {})
-        if meta.get("n_rows") == n_expected and len(parsed) == n_expected:
+        if (
+            meta.get("n_rows") == n_expected
+            and len(parsed) == n_expected
+            and meta.get("semantic_embedding_version") == RECIPE_SEMANTIC_EMBEDDING_VERSION
+        ):
             print(f"Loaded cached recipe parse + embeddings ({n_expected:,} rows) → {work_dir}")
             return parsed, name_emb, prep_emb, dequant_emb, meta
+        if meta.get("semantic_embedding_version") != RECIPE_SEMANTIC_EMBEDDING_VERSION:
+            print(
+                f"Recipe embedding cache stale "
+                f"({meta.get('semantic_embedding_version')!r} != {RECIPE_SEMANTIC_EMBEDDING_VERSION!r}); rebuilding…",
+                flush=True,
+            )
 
     print(f"Building recipe parse + 3× embeddings ({n_expected:,} rows) → {work_dir}")
     parsed, name_emb, prep_emb, dequant_emb, meta_bit = build_recipe_artifacts(
@@ -478,9 +513,10 @@ def embed_adhoc_recipe_queries(
     parsed = _parse_table(df, "ingredient", id_cols=["recipe_id", "ingredient_idx"], show_progress=False)
     parsed["prep_used_unprepared"] = ~parsed["preparation"].map(has_preparation)
     for i in range(len(parsed)):
-        parsed.loc[i, "dequantified"] = dequantified_text(
-            parsed.iloc[i], raw=str(parsed.iloc[i]["ingredient"])
-        )
+        row = parsed.iloc[i]
+        raw = str(row["ingredient"])
+        parsed.loc[i, "dequantified"] = dequantified_text(row, raw=raw)
+        parsed.loc[i, "semantic_embedding_text"] = semantic_embedding_text(row, raw=raw)
     model = load_encoder(model_name)
     unprepared_vec = load_or_build_unprepared_embedding(work_dir, model_name=model_name, model=model)
     name_emb, prep_emb, dequant_emb = _embed_parsed_table(

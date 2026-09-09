@@ -1,0 +1,27 @@
+[Unit]
+Description=Capstone Recipe Opt Agent (Docker image from ECR)
+After=network-online.target docker.service
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/capstone-ecr.env
+ExecStartPre=-/usr/bin/docker stop capstone-mvp
+ExecStartPre=-/usr/bin/docker rm capstone-mvp
+ExecStartPre=/usr/bin/docker pull ${ECR_IMAGE_URI}
+ExecStart=/usr/bin/docker run --name capstone-mvp --rm \
+  -p 80:8000 \
+  --env-file /opt/capstone/.env \
+  -e PYTHONPATH=/app/scripts:/app \
+  -e RECIPE_DATA_SOURCE=db \
+  -e MACROIQ_FAST_DEMO=1 \
+  -e MACROIQ_SAVE_NEIGHBORHOOD_CACHE=1 \
+  ${ECR_IMAGE_URI}
+ExecStop=-/usr/bin/docker stop capstone-mvp
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

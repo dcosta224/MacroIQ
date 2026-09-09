@@ -252,7 +252,11 @@ def warm_mvp_corpus(*, force_refresh: bool = False) -> dict[str, Any]:
             return _cache
 
         if not force_refresh:
-            disk = load_corpus_from_disk()
+            disk = None
+            try:
+                disk = load_corpus_from_disk()
+            except Exception:
+                disk = None
             if disk is not None and _disk_cache_complete(disk):
                 disk["load_source"] = "disk"
                 _cache = disk
@@ -274,7 +278,11 @@ def get_mvp_corpus() -> dict[str, Any]:
 
 def corpus_status() -> dict[str, Any]:
     if _cache is None:
-        disk = load_corpus_from_disk()
+        disk = None
+        try:
+            disk = load_corpus_from_disk()
+        except Exception:
+            disk = None
         if disk is not None:
             return {
                 "ready": False,

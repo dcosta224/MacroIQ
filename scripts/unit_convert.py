@@ -1,8 +1,9 @@
 """Convert recipe portion quantities between volume and mass units.
 
-Uses US customary definitions for kitchen units (cup, tbsp, tsp, pint, quart)
-and SI for metric (mL, L, g, kg). Mass ounces are avoirdupois (weight oz),
-not fluid ounces.
+Uses US customary definitions for kitchen units (cup, tbsp, tsp, pint, quart,
+fluid ounce, gallon) and SI for metric (mL, L, g, kg). Mass ounces are
+avoirdupois (weight oz), not fluid ounces — use ``fl oz`` / ``fluid ounce``
+for volume.
 
 Primary entry points:
   convert_volume(quantity, from_unit, to_unit)
@@ -17,8 +18,11 @@ Example:
 
 from __future__ import annotations
 
+import re
 from numbers import Real
 from typing import Literal
+
+from unit_aliases import FLUID_OUNCE_TEXT_RE, mass_synonyms_for_unit_convert, volume_synonyms_for_unit_convert
 
 UnitKind = Literal["volume", "mass"]
 
@@ -26,11 +30,14 @@ UnitKind = Literal["volume", "mass"]
 VOLUME_TO_ML: dict[str, float] = {
     "teaspoon": 4.92892159375,
     "tablespoon": 14.7867647813,
+    "fluid_ounce": 29.5735295625,
     "cup": 236.5882365,
     "pint": 473.176473,
     "quart": 946.352946,
+    "gallon": 3785.411784,
     "milliliter": 1.0,
     "liter": 1000.0,
+    "cubic_inch": 16.387064,
 }
 
 MASS_TO_GRAM: dict[str, float] = {
@@ -40,52 +47,9 @@ MASS_TO_GRAM: dict[str, float] = {
     "pound": 453.59237,
 }
 
-VOLUME_ALIASES: dict[str, str] = {
-    "tsp": "teaspoon",
-    "tspn": "teaspoon",
-    "teaspoons": "teaspoon",
-    "tbsp": "tablespoon",
-    "tbs": "tablespoon",
-    "tablespoons": "tablespoon",
-    "T": "tablespoon",
-    "t": "teaspoon",
-    "c": "cup",
-    "cup": "cup",
-    "cups": "cup",
-    "pt": "pint",
-    "pints": "pint",
-    "qt": "quart",
-    "qts": "quart",
-    "quarts": "quart",
-    "ml": "milliliter",
-    "milliliter": "milliliter",
-    "milliliters": "milliliter",
-    "millilitre": "milliliter",
-    "millilitres": "milliliter",
-    "l": "liter",
-    "liter": "liter",
-    "liters": "liter",
-    "litre": "liter",
-    "litres": "liter",
-}
+VOLUME_ALIASES: dict[str, str] = volume_synonyms_for_unit_convert()
 
-MASS_ALIASES: dict[str, str] = {
-    "g": "gram",
-    "gram": "gram",
-    "grams": "gram",
-    "kg": "kilogram",
-    "kilogram": "kilogram",
-    "kilograms": "kilogram",
-    "kilo": "kilogram",
-    "kilos": "kilogram",
-    "oz": "ounce",
-    "ounce": "ounce",
-    "ounces": "ounce",
-    "lb": "pound",
-    "lbs": "pound",
-    "pound": "pound",
-    "pounds": "pound",
-}
+MASS_ALIASES: dict[str, str] = mass_synonyms_for_unit_convert()
 
 
 class UnitConversionError(ValueError):
@@ -98,7 +62,21 @@ def _clean_unit_token(unit: str) -> str:
         raise UnitConversionError("Unit string is empty")
     if text == "T":
         return "T"
-    return text.lower().replace(".", "")
+    lowered = text.lower()
+    if FLUID_OUNCE_TEXT_RE.search(lowered):
+        return "fluid ounce"
+    normalized = lowered.replace(".", "")
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def canonical_volume_token(raw: str) -> str | None:
+    """Map a volume token (from regex or USDA text) to a canonical unit, or None."""
+    if not raw or not str(raw).strip():
+        return None
+    try:
+        return normalize_volume_unit(str(raw))
+    except UnitConversionError:
+        return None
 
 
 def normalize_volume_unit(unit: str) -> str:
@@ -121,6 +99,8 @@ def normalize_mass_unit(unit: str) -> str:
 
 def unit_kind(unit: str) -> UnitKind:
     """Return ``volume`` or ``mass`` for a unit string."""
+    if FLUID_OUNCE_TEXT_RE.search(str(unit)):
+        return "volume"
     token = _clean_unit_token(unit)
     if token in VOLUME_ALIASES or token in VOLUME_TO_ML:
         return "volume"

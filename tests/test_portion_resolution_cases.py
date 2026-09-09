@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from portion_gram import CountPortionCandidate, resolve_grams_from_plan  # noqa: E402
+from portion_gram import CountPortionCandidate, PortionCandidate, resolve_grams_from_plan  # noqa: E402
 from resolution_plan import build_resolution_plan  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures" / "portion_resolution_cases.json"
@@ -25,6 +25,13 @@ def _build_count_index(raw: dict) -> dict[int, list[CountPortionCandidate]]:
     out: dict[int, list[CountPortionCandidate]] = {}
     for fdc_id, rows in raw.items():
         out[int(fdc_id)] = [CountPortionCandidate(**row) for row in rows]
+    return out
+
+
+def _build_volume_index(raw: dict) -> dict[int, list[PortionCandidate]]:
+    out: dict[int, list[PortionCandidate]] = {}
+    for fdc_id, rows in raw.items():
+        out[int(fdc_id)] = [PortionCandidate(**row) for row in rows]
     return out
 
 
@@ -45,6 +52,8 @@ def test_resolution_case(case: dict) -> None:
         _apply_enrichment(plan, case["enrichment"])
 
     count_index = _build_count_index(case.get("count_portion_index") or {})
+    volume_index = _build_volume_index(case.get("portion_index") or {})
+    matched_portion_id = case.get("matched_portion_id")
     conn = None
     if case.get("raw_portion_rows"):
         class _FakeConn:
@@ -63,6 +72,8 @@ def test_resolution_case(case: dict) -> None:
                 ingredient_raw=ingredient,
                 name=parse.get("name"),
                 count_portion_index=count_index,
+                portion_index=volume_index,
+                matched_portion_id=matched_portion_id,
                 conn=conn,
                 llm_negligible_calories=bool(case.get("llm_negligible_calories", False)),
             )
@@ -75,6 +86,8 @@ def test_resolution_case(case: dict) -> None:
             ingredient_raw=ingredient,
             name=parse.get("name"),
             count_portion_index=count_index,
+            portion_index=volume_index,
+            matched_portion_id=matched_portion_id,
             llm_negligible_calories=bool(case.get("llm_negligible_calories", False)),
         )
 
